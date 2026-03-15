@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "龙虾管理助手",
+  "productName": "Lobster Manager",
   "version": "1.0.0",
   "identifier": "com.openclaw.lobster-manager",
   "build": {
