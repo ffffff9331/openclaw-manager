@@ -1338,6 +1338,15 @@ function App() {
                 </div>
               )}
 
+              {/* 添加模型按钮 */}
+              <button 
+                className="btn btn-primary" 
+                style={{ marginBottom: '20px' }}
+                onClick={() => setShowAddModelModal(true)}
+              >
+                ➕ 添加自定义模型
+              </button>
+
               {/* 按 Provider 分组显示 */}
               {Object.entries(groupedModels).map(([provider, models]) => (
                 <div key={provider} style={{ marginBottom: '24px' }}>
