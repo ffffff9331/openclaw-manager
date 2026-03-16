@@ -18,12 +18,12 @@
 > 💡 **提示**：macOS 下载后如果提示"已损坏"，在终端运行 `xattr -cr "/Applications/OpenClawManager.app"` 即可打开。
 
 ### Windows
-[下载 Windows Installer (.exe)](TODO)
+[下载 Windows Installer (.exe)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_x64-setup.exe)
 
-[下载 Windows MSI (.msi)](TODO)
+[下载 Windows MSI (.msi)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_x64_en-US.msi)
 
 ### Linux
-[下载 Linux AppImage](TODO)
+[下载 Linux AppImage](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_amd64.AppImage)
 
 ## 📋 环境要求
 
