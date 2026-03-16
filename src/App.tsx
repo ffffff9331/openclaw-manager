@@ -720,7 +720,9 @@ function App() {
   // 设置默认模型
   const setDefaultModel = async (modelId: string, provider: string) => {
     try {
-      await invoke("run_command", { command: `openclaw config set agents.defaults.model "${modelId}"` });
+      // 设置 models 字典格式
+      const modelKey = `${provider}/${modelId}`;
+      await invoke("run_command", { command: `openclaw config set agents.defaults.models.${modelKey.replace(/\//g, '\\/')}.alias "${modelId}"` });
       setCurrentModel(modelId);
       setCurrentModelProvider(provider);
       alert("默认模型已切换！请重启 Gateway");
