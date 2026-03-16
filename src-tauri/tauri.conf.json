@@ -42,12 +42,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "updater": {
-      "endpoints": [
-        "https://github.com/ffffff9331/openclaw-manager/releases/latest/download/latest.json"
-      ],
-      "pubkey": ""
-    }
+    ]
   }
 }

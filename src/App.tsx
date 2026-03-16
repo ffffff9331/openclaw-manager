@@ -496,11 +496,10 @@ function App() {
     try {
       let url = "";
       if (channel.id === "telegram") {
-        const result = await invoke<{ success: boolean; output: string }>({
+        const result = await invoke<{ success: boolean; output: string }>("run_command", {
           command: "openclaw config get channels.telegram.botToken"
         });
         if (result.success && result.output) {
-          // 从bot token获取chat ID的链接
           url = "https://web.telegram.org";
         }
       } else if (channel.id === "discord") {
