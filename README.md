@@ -16,17 +16,17 @@
 ## 📥 下载安装
 
 ### macOS
-[下载 macOS 版 (Apple Silicon)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_aarch64.dmg)
+[下载 macOS 版 (Apple Silicon)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.2/OpenClawManager_1.1.1_aarch64.dmg)
 
 > 💡 **提示**：macOS 下载后如果提示"已损坏"，在终端运行 `xattr -cr "/Applications/OpenClawManager.app"` 即可打开。
 
 ### Windows
-[下载 Windows Installer (.exe)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_x64-setup.exe)
+[下载 Windows Installer (.exe)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.2/OpenClawManager_1.1.1_x64-setup.exe)
 
-[下载 Windows MSI (.msi)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_x64_en-US.msi)
+[下载 Windows MSI (.msi)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.2/OpenClawManager_1.1.1_x64_en-US.msi)
 
 ### Linux
-[下载 Linux AppImage](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_amd64.AppImage)
+[下载 Linux AppImage](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.2/OpenClawManager_1.1.1_amd64.AppImage)
 
 ## 📋 环境要求
 
