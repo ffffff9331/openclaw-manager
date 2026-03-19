@@ -4,26 +4,29 @@
 
 ## ⭐ 功能特性
 
-- 🖥️ **系统诊断** - 一键检测5项：操作系统、OpenClaw版本、Node.js版本、配置目录、OpenClaw Doctor
+- 🖥️ **系统诊断** - 一键检测：操作系统、OpenClaw版本、Node.js版本、配置目录、OpenClaw Doctor
 - 🎛️ **Gateway 控制** - 一键启动/停止/重启，随时掌控
 - ⚡ **快捷指令** - 内置常用命令，支持自定义指令
-- 🤖 **模型管理** - 自由添加自定义 AI 模型
+- 🤖 **模型管理** - 自由添加自定义 AI 模型，设为默认
 - 📱 **多平台集成** - Telegram、Discord、飞书、Slack、WhatsApp、Signal
+- 🌐 **一键跳转** - 6个渠道一键打开对应网页
+- 📋 **App 日志** - 本地查看应用运行日志
+- 🔄 **检查更新** - 自动检测新版本，一键下载
 
 ## 📥 下载安装
 
 ### macOS
-[下载 macOS 版 (Apple Silicon)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_aarch64.dmg)
+[下载 macOS 版 (Apple Silicon)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_aarch64.dmg)
 
 > 💡 **提示**：macOS 下载后如果提示"已损坏"，在终端运行 `xattr -cr "/Applications/OpenClawManager.app"` 即可打开。
 
 ### Windows
-[下载 Windows Installer (.exe)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_x64-setup.exe)
+[下载 Windows Installer (.exe)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_x64-setup.exe)
 
-[下载 Windows MSI (.msi)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_x64_en-US.msi)
+[下载 Windows MSI (.msi)](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_x64_en-US.msi)
 
 ### Linux
-[下载 Linux AppImage](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.0.1/OpenClawManager_1.0.1_amd64.AppImage)
+[下载 Linux AppImage](https://github.com/ffffff9331/openclaw-manager/releases/download/v1.1.1/OpenClawManager_1.1.1_amd64.AppImage)
 
 ## 📋 环境要求
 
