@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 import {
   MessageSquare,
   Activity,
@@ -13,9 +14,23 @@ import {
   Moon,
   Sun,
   CheckCircle,
-  Terminal
+  Terminal,
+  FileText
 } from "lucide-react";
 import "./App.css";
+
+// 辅助函数：安全解析 JSON，过滤掉 openclaw 插件日志
+const parseOpenClawJson = (output: string): any => {
+  if (!output) return {};
+  // 过滤掉 [plugins] 开头的行（日志输出）
+  const cleanOutput = output.replace(/^\[plugins\].*$/gm, '').trim();
+  try {
+    return JSON.parse(cleanOutput || '{}');
+  } catch (e) {
+    console.error("JSON parse error:", e, "raw output:", output);
+    return {};
+  }
+};
 
 // 类型定义
 interface GatewayStatus {
@@ -65,6 +80,7 @@ function App() {
 
   // 模型配置
   const [modelConfigs, setModelConfigs] = useState<any[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
   const [currentModel, setCurrentModel] = useState("");
   const [currentModelProvider, setCurrentModelProvider] = useState("");
   const [showAddModelModal, setShowAddModelModal] = useState(false);
@@ -73,6 +89,7 @@ function App() {
   // 系统诊断信息
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [doctorResult, setDoctorResult] = useState<string>("");
+  const [appLogs, setAppLogs] = useState<string>("");
 
   // 设置
   const [settings, setSettings] = useState({
@@ -92,6 +109,7 @@ function App() {
     { id: "tasks", label: "快捷指令", icon: Terminal },
     { id: "models", label: "模型", icon: Cpu },
     { id: "doctor", label: "测试诊断", icon: Wrench },
+    { id: "applogs", label: "App日志", icon: FileText },
     { id: "settings", label: "设置", icon: Settings }
   ];
   
@@ -171,31 +189,36 @@ function App() {
     applicationId: ""
   });
 
-  // 加载频道状态
+  // 加载频道状态 - 使用 openclaw status 输出
   const loadChannelsStatus = async () => {
     try {
-                        const result = await invoke<{ success: boolean; output: string }>("run_command", {
-        command: "openclaw channels status"
+      const result = await invoke<{ success: boolean; output: string }>("run_command", {
+        command: "openclaw status"
       });
       
       if (result.success) {
-        const output = result.output;
+        // 只保留 Channels 部分
+        const lines = result.output.split('\n');
+        const channelsStart = lines.findIndex(l => l.startsWith('Channels'));
+        const channelsEnd = lines.findIndex((l, i) => i > channelsStart && l.startsWith('Sessions'));
+        const channelsOutput = lines.slice(channelsStart, channelsEnd).join('\n');
+        
         const newChannels = channels.map(ch => {
+          // 查找包含频道名的行 (数据行以 │ 开头)
+          const channelLine = channelsOutput.split('\n').find(line => 
+            line.toLowerCase().includes(ch.id) && line.startsWith('│')
+          ) || "";
+          
           let status: "configured" | "not_configured" = "not_configured";
           let enabled = false;
-          // 解析状态：enabled, configured, running
-          if (output.toLowerCase().includes(ch.id)) {
-            const channelLine = output.split('\n').find(line => line.toLowerCase().includes(ch.id)) || "";
-            if (channelLine.includes("configured") && channelLine.includes("running")) {
-              status = "configured";
-              enabled = true;
-            } else if (channelLine.includes("configured")) {
-              status = "configured";
-            }
-            if (channelLine.includes("enabled")) {
-              enabled = true;
-            }
+          
+          if (channelLine.includes("OK") || channelLine.includes("configured")) {
+            status = "configured";
           }
+          if (channelLine.includes("ON") || channelLine.includes("enabled")) {
+            enabled = true;
+          }
+          
           return { ...ch, status, enabled };
         });
         setChannels(newChannels);
@@ -215,7 +238,7 @@ function App() {
           command: "openclaw config get channels.telegram"
         });
         if (result.success) {
-          const config = JSON.parse(result.output);
+          const config = parseOpenClawJson(result.output);
           setTelegramConfig({
             botToken: config.botToken ? "✅ 已配置" : "",
             userId: config.userId || "",
@@ -234,7 +257,7 @@ function App() {
           command: "openclaw config get channels.feishu"
         });
         if (result.success) {
-          const config = JSON.parse(result.output);
+          const config = parseOpenClawJson(result.output);
           setFeishuConfig({
             appId: config.appId || "",
             appSecret: config.appSecret ? "✅ 已配置" : "",
@@ -252,7 +275,7 @@ function App() {
           command: "openclaw config get channels.discord"
         });
         if (result.success) {
-          const config = JSON.parse(result.output);
+          const config = parseOpenClawJson(result.output);
           setDiscordConfig({
             botToken: config.botToken ? "✅ 已配置" : "",
             applicationId: config.applicationId || ""
@@ -373,7 +396,7 @@ function App() {
         command: "openclaw config get channels.slack"
       });
       if (result.success) {
-        const config = JSON.parse(result.output);
+        const config = parseOpenClawJson(result.output);
         setSlackConfig({
           botToken: config.botToken ? "***已配置***" : "",
           signingSecret: config.signingSecret ? "***已配置***" : ""
@@ -409,7 +432,7 @@ function App() {
         command: "openclaw config get channels.whatsapp"
       });
       if (result.success) {
-        const config = JSON.parse(result.output);
+        const config = parseOpenClawJson(result.output);
         setWhatsappConfig({
           phoneNumberId: config.phoneNumberId || "",
           accessToken: config.accessToken ? "***已配置***" : ""
@@ -445,7 +468,7 @@ function App() {
         command: "openclaw config get channels.signal"
       });
       if (result.success) {
-        const config = JSON.parse(result.output);
+        const config = parseOpenClawJson(result.output);
         setSignalConfig({
           phoneNumber: config.phoneNumber || "",
           password: config.password ? "***已配置***" : ""
@@ -491,42 +514,17 @@ function App() {
     setSystemLoading(null);
   };
 
-  // 打开平台网页
-  const openChannelWeb = async (channel: Channel) => {
-    try {
-      let url = "";
-      if (channel.id === "telegram") {
-        const result = await invoke<{ success: boolean; output: string }>("run_command", {
-          command: "openclaw config get channels.telegram.botToken"
-        });
-        if (result.success && result.output) {
-          url = "https://web.telegram.org";
-        }
-      } else if (channel.id === "discord") {
-        url = "https://discord.com/channels/@me";
-      } else if (channel.id === "slack") {
-        url = "https://app.slack.com";
-      } else if (channel.id === "whatsapp") {
-        url = "https://web.whatsapp.com";
-      } else if (channel.id === "signal") {
-        alert("Signal 暂不支持网页版，请使用桌面应用");
-        return;
-      } else if (channel.id === "feishu") {
-        url = "https://open.feishu.cn";
-      }
-      
-      if (url) {
-        window.open(url, '_blank');
-      }
-    } catch (e) {
-      console.error("Failed to open channel:", e);
-    }
-  };
-
   // 加载频道状态
   useEffect(() => {
     loadChannelsStatus();
   }, []);
+  
+  // 切换到对话工具 tab 时刷新频道状态
+  useEffect(() => {
+    if (activeTab === "chat") {
+      loadChannelsStatus();
+    }
+  }, [activeTab]);
   
   const [systemLoading, setSystemLoading] = useState<string | null>(null);
 
@@ -570,6 +568,7 @@ function App() {
     checkGatewayStatus();
     fetchLogs();
     loadModelConfigs();
+    loadCurrentModel();  // 单独获取当前模型，启动时就加载
     loadSystemInfo();
   }, []);
 
@@ -593,7 +592,7 @@ function App() {
     try {
       // 从 openclaw 命令获取状态
                         const result = await invoke<{ success: boolean; output: string }>("run_command", { command: "openclaw gateway status --json" });
-      const status = JSON.parse(result.output);
+      const status = parseOpenClawJson(result.output);
       const isRunning = status.service?.runtime?.status === "running";
       
       // 获取本地检测的运行时长
@@ -627,10 +626,12 @@ function App() {
 
   // 加载模型配置
   const loadModelConfigs = async () => {
+    setModelsLoading(true);
     try {
-                        const result = await invoke<{ success: boolean; output: string }>("run_command", { command: "openclaw config get models" });
+      const result = await invoke<{ success: boolean; output: string }>("run_command", { command: "openclaw config get models" });
       if (result.success && result.output) {
-        const config = JSON.parse(result.output);
+        // 过滤掉 openclaw 输出的插件日志（如 [plugins] feishu_doc: ...）
+        const config = parseOpenClawJson(result.output);
         // 解析 providers
         const configs: any[] = [];
         if (config.providers) {
@@ -653,24 +654,42 @@ function App() {
           }
         }
         setModelConfigs(configs);
-        
-        // 获取当前使用的模型，构建完整 key
-        const defaultResult = await invoke<{ success: boolean; output: string }>("run_command", { command: "openclaw config get agents.defaults.models" });
-        if (defaultResult.success) {
-          const modelsConfig = JSON.parse(defaultResult.output);
-          // 取第一个模型 key（当前激活的）
-          const activeModelKey = Object.keys(modelsConfig)[0];
-          
-          if (activeModelKey) {
-            const [provider, ...idParts] = activeModelKey.split('/');
-            const modelId = idParts.join('/');
-            setCurrentModelProvider(provider);
-            setCurrentModel(modelId);
+        setModelsLoading(false);
+      }
+    } catch (e) {
+      console.error("Failed to load model configs:", e);
+    }
+  };
+
+  // 单独获取当前使用的模型（从 sessions，app 启动时就加载）
+  const loadCurrentModel = async () => {
+    try {
+      const result = await invoke<{ success: boolean; output: string }>("run_command", { command: "openclaw sessions" });
+      if (result.success && result.output) {
+        // 过滤掉 [plugins] 开头的行
+        const lines = result.output.split('\n').filter(line => !line.startsWith('[plugins]'));
+        for (const line of lines) {
+          if (line.includes('direct') && !line.includes('Kind')) {
+            // 解析列：Kind Key Age Model Tokens Flags
+            // Age 可能是 "just now"，"1m ago"，"2h ago" 等
+            const match = line.match(/direct\s+\S+\s+(just\s+now|\d+[mh]?)\s+ago\s+(\S+)/);
+            if (match && match[2]) {
+              const modelName = match[2];
+              setCurrentModel(modelName);
+              if (modelName.includes('GLM')) {
+                setCurrentModelProvider('api.edgefn.net');
+              } else if (modelName.includes('Qwen')) {
+                setCurrentModelProvider('ollama');
+              } else {
+                setCurrentModelProvider('api.edgefn.net');
+              }
+              break;
+            }
           }
         }
       }
     } catch (e) {
-      console.error("Failed to load model configs:", e);
+      console.error("Failed to load current model:", e);
     }
   };
 
@@ -678,27 +697,21 @@ function App() {
   const addModel = async () => {
     if (!newModelConfig.name || !newModelConfig.id || !newModelConfig.baseUrl) return;
     try {
+      // 一次性设置整个 provider（避免分步设置的验证问题）
+      const providerConfig = {
+        baseUrl: newModelConfig.baseUrl,
+        apiKey: newModelConfig.apiKey,
+        api: "openai-completions",
+        models: [{
+          id: newModelConfig.id,
+          name: newModelConfig.name,
+          contextWindow: 128000,
+          maxTokens: 8192
+        }]
+      };
       const providerName = `custom-${Date.now()}`;
       await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.baseUrl "${newModelConfig.baseUrl}"` 
-      });
-      await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.apiKey "${newModelConfig.apiKey}"` 
-      });
-      await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.api "openai-completions"` 
-      });
-      await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.models.[0].id "${newModelConfig.id}"` 
-      });
-      await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.models.[0].name "${newModelConfig.name}"` 
-      });
-      await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.models.[0].contextWindow 128000` 
-      });
-      await invoke("run_command", { 
-        command: `openclaw config set models.providers.${providerName}.models.[0].maxTokens 8192` 
+        command: `openclaw config set models.providers.${providerName} '${JSON.stringify(providerConfig)}'` 
       });
       alert("模型添加成功！请重启 Gateway");
       setShowAddModelModal(false);
@@ -752,14 +765,44 @@ function App() {
   // 设置默认模型
   const setDefaultModel = async (modelId: string, provider: string) => {
     try {
-      // 设置 models 字典格式
+      // 设置顶层 model 字段
       const modelKey = `${provider}/${modelId}`;
+      await invoke("run_command", { command: `openclaw config set agents.defaults.model "${modelKey}"` });
+      // 同时设置 models 字典格式（向后兼容）
       await invoke("run_command", { command: `openclaw config set agents.defaults.models.${modelKey.replace(/\//g, '\\/')}.alias "${modelId}"` });
+      
+      // 重启 Gateway 使配置生效
+      await invoke("run_command", { command: "openclaw gateway restart" });
+      
       setCurrentModel(modelId);
       setCurrentModelProvider(provider);
-      alert("默认模型已切换！请重启 Gateway");
+      alert("默认模型已切换，Gateway 已重启！");
     } catch (e) {
       alert("切换失败: " + e);
+    }
+  };
+
+  // 删除模型
+  const deleteModel = async (provider: string, modelId: string) => {
+    alert("开始删除: " + provider + " / " + modelId);
+    // 保护：不允许删除系统 provider
+    if (!provider.startsWith('custom-') || provider === 'custom-api-edgefn-backup') {
+      alert("系统模型不允许删除！");
+      return;
+    }
+    if (!confirm(`确定要删除模型 ${modelId} 吗？`)) return;
+    try {
+      // 删除整个 provider（使用 unset 命令）
+      await invoke("run_command", { command: `openclaw config unset models.providers.${provider}` });
+      // 重启 Gateway 使配置生效
+      await invoke("run_command", { command: "openclaw gateway restart" });
+      // 重新加载模型列表
+      await loadModelConfigs();
+      // 重新加载当前模型
+      await loadCurrentModel();
+      alert("模型已删除，Gateway 已重启！");
+    } catch (e) {
+      alert("删除失败: " + e);
     }
   };
 
@@ -787,12 +830,74 @@ function App() {
         } catch {}
       }
       
+      // 检查 OpenClaw 是否有更新
+      let updateAvailable = false;
+      let latestVersion = "";
+      try {
+        const currentVersion = versionResult.success ? versionResult.output.trim().replace('OpenClaw ', '').split(' ')[0] : '';
+        // 获取 GitHub 最新版本
+        const latestResult = await invoke<{ success: boolean; output: string }>("run_command", { command: 'curl -s "https://api.github.com/repos/openclaw/openclaw/releases/latest"' });
+        if (latestResult.success) {
+          const match = latestResult.output.match(/"tag_name":\s*"([^"]+)"/);
+          if (match) {
+            latestVersion = match[1].replace('v', '').split('-')[0];
+            if (currentVersion && latestVersion) {
+              const currentParts = currentVersion.split('.').map(Number);
+              const latestParts = latestVersion.split('.').map(Number);
+              for (let i = 0; i < 3; i++) {
+                if ((latestParts[i] || 0) > (currentParts[i] || 0)) {
+                  updateAvailable = true;
+                  break;
+                } else if ((latestParts[i] || 0) < (currentParts[i] || 0)) {
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to check update:", e);
+      }
+      
+      // 检查 Node.js 是否有更新
+      let nodeUpdateAvailable = false;
+      let latestNodeVersion = "";
+      try {
+        const currentNodeVersion = nodeResult.success ? nodeResult.output.trim().replace('v', '') : '';
+        // 获取 Node.js LTS 版本
+        const nodeLatestResult = await invoke<{ success: boolean; output: string }>("run_command", { command: 'curl -s "https://nodejs.org/dist/index.json"' });
+        if (nodeLatestResult.success) {
+          const nodeMatch = nodeLatestResult.output.match(/"lts":\s*"([^"]+)"[^}]*"version":\s*"v([^"]+)"/);
+          if (nodeMatch) {
+            latestNodeVersion = nodeMatch[2];
+            if (currentNodeVersion && latestNodeVersion) {
+              const currentParts = currentNodeVersion.split('.').map(Number);
+              const latestParts = latestNodeVersion.split('.').map(Number);
+              for (let i = 0; i < 3; i++) {
+                if ((latestParts[i] || 0) > (currentParts[i] || 0)) {
+                  nodeUpdateAvailable = true;
+                  break;
+                } else if ((latestParts[i] || 0) < (currentParts[i] || 0)) {
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to check Node.js update:", e);
+      }
+      
       setSystemInfo({
         openclawVersion: versionResult.success ? versionResult.output.trim() : "未知",
         nodeVersion: nodeResult.success ? nodeResult.output.trim() : "未知",
         os: osInfo,
         configPath: "/Users/fan/.openclaw/",
-        dataPath: "/Users/fan/.openclaw/"
+        dataPath: "/Users/fan/.openclaw/",
+        updateAvailable,
+        latestVersion: latestVersion ? "v" + latestVersion : "",
+        nodeUpdateAvailable,
+        latestNodeVersion: latestNodeVersion ? "v" + latestNodeVersion : ""
       });
 
       // 加载设置
@@ -813,9 +918,14 @@ function App() {
     }
   };
 
-  // 检查更新
-  const checkForUpdates = () => {
-    window.open("https://github.com/ffffff9331/openclaw-manager/releases", "_blank");
+  // 加载 App 日志
+  const loadAppLogs = async () => {
+    try {
+      const result = await invoke<string>("read_app_logs", { lines: 100 });
+      setAppLogs(result);
+    } catch (e) {
+      setAppLogs("加载失败: " + e);
+    }
   };
 
   // 打开配置目录
@@ -872,18 +982,32 @@ function App() {
                       <div className="channel-card-status">
                         {channel.status === "configured" ? "已配置" : "未配置"}
                       </div>
-                      {channel.status === "configured" && channel.enabled && (
-                        <button
-                          className="channel-open-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openChannelWeb(channel);
-                          }}
-                          title="打开对话"
-                        >
-                          打开
-                        </button>
-                      )}
+                      {/* 所有渠道都显示打开按钮 */}
+                      <button 
+                        className="channel-open-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          let url = "";
+                          if (channel.id === "telegram") url = "https://t.me";
+                          else if (channel.id === "feishu") url = "https://www.feishu.cn";
+                          else if (channel.id === "discord") url = "https://discord.com/app";
+                          else if (channel.id === "whatsapp") url = "https://web.whatsapp.com";
+                          else if (channel.id === "signal") url = "https://signal.org";
+                          else if (channel.id === "slack") url = "https://slack.com/signin";
+                          if (url) invoke("run_command", { command: `open "${url}"` });
+                        }}
+                        style={{
+                          fontSize: '11px',
+                          padding: '4px 8px',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        打开
+                      </button>
                       <div 
                         className="channel-card-toggle"
                         onClick={(e) => {
@@ -1379,7 +1503,26 @@ function App() {
         // 唯一标识：当前使用 provider + modelId
         const getModelKey = (model: any) => `${model.provider}:${model.id}`;
         const currentModelKey = currentModel && currentModelProvider ? `${currentModelProvider}:${currentModel}` : '';
-        const currentModelName = modelConfigs.find(m => getModelKey(m) === currentModelKey)?.name || currentModel;
+        
+        // 更精确的匹配：优先精确匹配 provider+model，然后才模糊匹配
+        let currentModelName = currentModel;
+        if (currentModel && currentModelProvider) {
+          // 先找精确匹配
+          const exactMatch = modelConfigs.find(m => 
+            m.provider === currentModelProvider && m.id === currentModel
+          );
+          if (exactMatch) {
+            currentModelName = exactMatch.name;
+          } else {
+            // 再找包含 model id 的
+            const fuzzyMatch = modelConfigs.find(m => 
+              m.id === currentModel || m.id.includes(currentModel) || currentModel.includes(m.id)
+            );
+            if (fuzzyMatch) {
+              currentModelName = fuzzyMatch.name;
+            }
+          }
+        }
 
         return (
           <div className="page-container">
@@ -1394,14 +1537,12 @@ function App() {
                 <div style={{ 
                   marginBottom: '20px', 
                   padding: '12px 16px', 
-                  background: '#FFF7ED', 
+                  background: 'var(--bg-hover)', 
                   borderRadius: '8px',
-                  border: '2px solid #FF6B35',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
                 }}>
-                  <CheckCircle size={18} style={{ color: '#FF6B35' }} />
                   <span>当前使用: <strong>{currentModelName}</strong></span>
                 </div>
               )}
@@ -1445,8 +1586,8 @@ function App() {
                         key={idx}
                         style={{
                           padding: '16px',
-                          background: getModelKey(model) === currentModelKey ? '#FFF7ED' : 'var(--bg-card)',
-                          border: getModelKey(model) === currentModelKey ? '2px solid #FF6B35' : '1px solid var(--border)',
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border)',
                           borderRadius: '12px',
                           transition: 'all 0.2s'
                         }}
@@ -1492,7 +1633,15 @@ function App() {
                             >
                               ✏️ 编辑
                             </button>
-                            {getModelKey(model) !== currentModelKey && (
+                            {(model.provider === currentModelProvider && model.id === currentModel) ? (
+                              <button 
+                                className="btn btn-small"
+                                style={{ background: '#22C55E', color: 'white' }}
+                                disabled
+                              >
+                                ✓ 当前使用
+                              </button>
+                            ) : (
                               <button 
                                 className="btn btn-small btn-primary"
                                 onClick={() => setDefaultModel(model.id, model.provider)}
@@ -1508,7 +1657,13 @@ function App() {
                 </div>
               ))}
               
-              {modelConfigs.length === 0 && (
+              {modelsLoading && (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'gray' }}>
+                  <div className="loading-spinner">加载中...</div>
+                </div>
+              )}
+
+              {modelConfigs.length === 0 && !modelsLoading && (
                 <div style={{ 
                   textAlign: 'center', 
                   padding: '40px', 
@@ -1637,57 +1792,116 @@ function App() {
                 <h2>系统诊断</h2>
               </div>
               
-              {/* 5项检查模块 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                {/* 1. 操作系统 */}
-                <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>操作系统</div>
-                  <div style={{ fontWeight: 600 }}>{systemInfo?.os || '检测中...'}</div>
-                </div>
-                
-                {/* 2. OpenClaw版本 */}
-                <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>OpenClaw版本</div>
-                  <div style={{ fontWeight: 600 }}>{systemInfo?.openclawVersion || '检测中...'}</div>
-                </div>
-                
-                {/* 3. Node.js版本 */}
-                <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Node.js版本</div>
-                  <div style={{ fontWeight: 600 }}>{systemInfo?.nodeVersion || '检测中...'}</div>
-                </div>
-                
-                {/* 4. 配置目录 */}
-                <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>配置目录</div>
-                  <div style={{ fontWeight: 600, fontSize: '12px' }}>{systemInfo?.configPath || '检测中...'}</div>
-                </div>
-              </div>
-              
-              {/* 5. OpenClaw Doctor */}
+              {/* 一键诊断按钮 */}
               <button 
                 className="btn btn-primary"
                 onClick={runFullDoctor}
-                style={{ marginBottom: '10px', width: '100%' }}
+                style={{ marginBottom: '20px', width: '100%', padding: '12px', fontSize: '16px' }}
               >
-                <Terminal size={18} /> 运行 OpenClaw Doctor
+                <Terminal size={18} /> 一键诊断
               </button>
+              
+              {/* 1. 快速概览模块 */}
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--text-muted)' }}>快速概览</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* 操作系统 */}
+                  <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>操作系统版本</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px' }}>{systemInfo?.os || '检测中...'}</div>
+                  </div>
+                  
+                  {/* OpenClaw版本 */}
+                  <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>OpenClaw版本</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px' }}>
+                      {systemInfo?.openclawVersion || '检测中...'}
+                      {systemInfo?.updateAvailable && (
+                        <span style={{ marginLeft: '8px', fontSize: '11px', background: '#EF4444', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>
+                          有更新 → {systemInfo?.latestVersion}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Node.js版本 */}
+                  <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Node.js版本</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px' }}>
+                      {systemInfo?.nodeVersion || '检测中...'}
+                      {systemInfo?.nodeUpdateAvailable && (
+                        <span style={{ marginLeft: '8px', fontSize: '11px', background: '#EF4444', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>
+                          有更新 → {systemInfo?.latestNodeVersion}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Doctor状态 */}
+                  <div style={{ padding: '12px', background: 'var(--bg-hover)', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>OpenClaw Doctor</div>
+                    <div style={{ fontWeight: 600, fontSize: '13px', color: doctorResult ? '#22C55E' : 'var(--text-muted)' }}>
+                      {doctorResult ? '已完成' : (doctorResult === '' ? '已检查' : '待检测')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 2. 详细诊断结果模块 */}
+              {doctorResult && (
+                <div style={{ marginTop: '20px' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--text-muted)' }}>详细诊断结果</h3>
+                  <div style={{ padding: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                    <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '400px', overflow: 'auto', background: 'var(--bg-hover)', padding: '12px', borderRadius: '4px', margin: 0 }}>
+                      {doctorResult}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case "applogs":
+        return (
+          <div className="page-container">
+            <div className="card">
+              <div className="card-header">
+                <FileText size={22} />
+                <h2>App 日志</h2>
+              </div>
               
               <button 
-                className="btn btn-secondary"
-                onClick={checkForUpdates}
-                style={{ marginBottom: '20px', width: '100%' }}
+                className="btn btn-primary"
+                onClick={loadAppLogs}
+                style={{ marginBottom: '16px', width: '100%' }}
               >
-                <RefreshCw size={18} /> 检查更新
+                <RefreshCw size={16} /> 刷新日志
               </button>
               
-              {/* 诊断结果 */}
-              {doctorResult && (
-                <div style={{ marginTop: '20px', padding: '12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '8px' }}>诊断结果:</div>
-                  <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '300px', overflow: 'auto', background: 'var(--bg-hover)', padding: '8px', borderRadius: '4px' }}>
-                    {doctorResult}
+              {appLogs && (
+                <div style={{ 
+                  background: 'var(--bg-hover)', 
+                  padding: '12px', 
+                  borderRadius: '8px',
+                  maxHeight: '500px',
+                  overflow: 'auto'
+                }}>
+                  <pre style={{ 
+                    fontSize: '11px', 
+                    whiteSpace: 'pre-wrap', 
+                    wordBreak: 'break-all',
+                    margin: 0,
+                    fontFamily: 'monospace'
+                  }}>
+                    {appLogs}
                   </pre>
+                </div>
+              )}
+              
+              {!appLogs && (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+                  点击上方按钮加载日志
                 </div>
               )}
             </div>
@@ -1845,7 +2059,40 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className="version">v1.0.0</div>
+          <div className="version" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>v1.1.0</span>
+            <button 
+              onClick={async () => {
+                try {
+                  const result = await invoke<{ success: boolean; output: string }>("run_command", { command: "cd ~/Desktop/openclaw-manager && git fetch origin && git status" });
+                  if (result.success) {
+                    if (result.output.includes("behind")) {
+                      alert("有新版本可用！请运行: cd ~/Desktop/openclaw-manager && git pull");
+                    } else {
+                      alert("已是最新版本");
+                    }
+                  }
+                } catch (e) {
+                  console.error("检查更新失败:", e);
+                }
+              }}
+              style={{ 
+                marginLeft: '8px',
+                fontSize: '11px', 
+                padding: '4px 10px',
+                background: 'var(--primary)',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              ✓ 检查更新
+            </button>
+          </div>
         </div>
       </aside>
 

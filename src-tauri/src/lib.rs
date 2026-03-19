@@ -2,12 +2,36 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::env;
 use std::path::PathBuf;
+use std::fs::{OpenOptions, create_dir_all};
+use std::io::Write;
+use simplelog::{CombinedLogger, WriteLogger, LevelFilter, Config};
+use log::{info, error, warn};
+
+// 获取日志目录
+fn get_log_dir() -> PathBuf {
+    let home = env::var("HOME").unwrap_or_else(|_| "/Users/fan".to_string());
+    let log_dir = PathBuf::from(format!("{}/.openclaw/app-logs", home));
+    let _ = create_dir_all(&log_dir);
+    log_dir
+}
 
 // 获取默认工作目录（用户主目录）
 fn get_default_dir() -> PathBuf {
     env::var("HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/Users/fan"))
+        .unwrap_or_else(|_| {
+            // 回退：尝试从 /Users 目录下的用户名推断
+            if let Ok(entries) = std::fs::read_dir("/Users") {
+                for entry in entries.flatten() {
+                    if let Ok(name) = entry.file_name().into_string() {
+                        if name != "Shared" && name != "Guest" {
+                            return PathBuf::from(format!("/Users/{}", name));
+                        }
+                    }
+                }
+            }
+            PathBuf::from("/Users/fan")  // 最终回退
+        })
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,11 +79,17 @@ fn run_command(command: String) -> CommandResult {
         };
     }
 
-    // 获取用户主目录作为默认工作目录
+    // 动态获取用户 PATH，不遗漏任何 npm/bun/volta 安装的全局命令
     let home_dir = env::var("HOME").unwrap_or_else(|_| "/Users/fan".to_string());
-    
-    // 构建完整的 PATH（包含 homebrew）
-    let full_path = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+    let full_path = env::var("PATH").unwrap_or_else(|_| {
+        format!(
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{}:{}:{}/.npm-global/bin:{}/.local/bin",
+            home_dir,
+            format!("{}/bin", home_dir),
+            home_dir,
+            home_dir
+        )
+    });
     
     let output = if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
         Command::new("zsh")
@@ -77,6 +107,13 @@ fn run_command(command: String) -> CommandResult {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            
+            // 记录命令执行日志
+            if out.status.success() {
+                info!("CMD OK: {}", &command[..command.len().min(100)]);
+            } else {
+                warn!("CMD FAIL: {} - {}", &command[..command.len().min(100)], stderr.chars().take(100).collect::<String>());
+            }
             
             if out.status.success() {
                 CommandResult {
@@ -261,17 +298,40 @@ fn run_doctor(check_type: String) -> String {
     }
 }
 
+// 读取 App 日志
+#[tauri::command]
+fn read_app_logs(lines: u32) -> String {
+    let log_dir = get_log_dir();
+    let log_file = log_dir.join("app.log");
+    
+    if !log_file.exists() {
+        return "日志文件不存在".to_string();
+    }
+    
+    // 使用 tail 命令获取最后 N 行
+    let output = Command::new("zsh")
+        .args(["-c", &format!("tail -n {} \"{}\"", lines, log_file.display())])
+        .output();
+    
+    match output {
+        Ok(out) => String::from_utf8_lossy(&out.stdout).to_string(),
+        Err(e) => format!("读取失败: {}", e),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        // .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             run_command,
             get_env,
             get_gateway_status,
             control_gateway,
-            run_doctor
+            run_doctor,
+            read_app_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
