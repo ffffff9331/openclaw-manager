@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { message, confirm } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { open } from "@tauri-apps/plugin-shell";
 import {
   MessageSquare,
@@ -88,6 +90,9 @@ function App() {
 
   // 系统诊断信息
   const [systemInfo, setSystemInfo] = useState<any>(null);
+  const [updateStatus, setUpdateStatus] = useState<string>("");
+  const [downloadUrl, setDownloadUrl] = useState<string>("");
+  const [appVersion, setAppVersion] = useState<string>("1.1.0");
   const [doctorResult, setDoctorResult] = useState<string>("");
   const [appLogs, setAppLogs] = useState<string>("");
 
@@ -148,8 +153,8 @@ function App() {
       
       setGatewayUrl(url);
       
-      // 用 shell 打开浏览器
-      await invoke("run_command", { command: `open "${url}"` });
+      // 用跨平台方式打开浏览器
+      await openUrl(url);
     } catch (e) {
       console.error("Failed to open gateway:", e);
     }
@@ -541,6 +546,11 @@ function App() {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
+  // 获取 App 版本
+  useEffect(() => {
+    invoke<string>("get_app_version").then(setAppVersion).catch(() => {});
+  }, []);
+
   // 强制修复滑块样式（黑暗模式下太亮）
   useEffect(() => {
     const style = document.createElement('style');
@@ -928,9 +938,21 @@ function App() {
     }
   };
 
-  // 打开配置目录
+  // 打开配置目录 - 跨平台
   const openConfigDir = async () => {
-    await invoke("run_command", { command: "open ~/.openclaw" });
+    // 尝试用 Tauri opener 打开目录
+    await openUrl("file://$HOME/.openclaw").catch(async () => {
+      // 回退: Windows 用 start, Linux 用 xdg-open, macOS 用 open
+      const isWindows = navigator.userAgent.includes('Windows');
+      const isLinux = navigator.userAgent.includes('Linux');
+      if (isWindows) {
+        await invoke("run_command", { command: 'start "" "%USERPROFILE%\\.openclaw"' });
+      } else if (isLinux) {
+        await invoke("run_command", { command: 'xdg-open ~/.openclaw' });
+      } else {
+        await invoke("run_command", { command: 'open ~/.openclaw' });
+      }
+    });
   };
 
   // 卸载 OpenClaw
@@ -994,7 +1016,7 @@ function App() {
                           else if (channel.id === "whatsapp") url = "https://web.whatsapp.com";
                           else if (channel.id === "signal") url = "https://signal.org";
                           else if (channel.id === "slack") url = "https://slack.com/signin";
-                          if (url) invoke("run_command", { command: `open "${url}"` });
+                          if (url) openUrl(url);
                         }}
                         style={{
                           fontSize: '11px',
@@ -1987,7 +2009,66 @@ function App() {
                 </div>
               </div>
 
-              {/* 卸载 */}
+              {/* 检查管理助手版本 */}
+              <h3 style={{ marginTop: '20px', marginBottom: '12px' }}>检查管理助手版本</h3>
+              <div className="settings-list">
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <div className="setting-name">{updateStatus || `当前版本 v${appVersion}`}</div>
+                  </div>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      // 如果已经有下载链接，直接打开浏览器下载
+                      if (downloadUrl) {
+                        await openUrl(downloadUrl);
+                        return;
+                      }
+                      // 否则检查更新
+                      setUpdateStatus("检查中...");
+                      try {
+                        const result = await invoke<{ success: boolean; output: string }>("run_command", { command: 'curl -s "https://api.github.com/repos/ffffff9331/openclaw-manager/releases/latest"' });
+                        if (result.success && result.output && result.output.includes('tag_name')) {
+                          const tagMatch = result.output.match(/"tag_name"\s*:\s*"v([^"]+)"/);
+                          const dmgMatch = result.output.match(/"browser_download_url"\s*:\s*"([^"]*dmg[^"]*)"/);
+                          if (tagMatch && dmgMatch) {
+                            const latestVersion = tagMatch[1];
+                            const currentVersion = appVersion;
+                            const latestParts = latestVersion.split('.').map(Number);
+                            const currentParts = currentVersion.split('.').map(Number);
+                            let hasUpdate = false;
+                            for (let i = 0; i < 3; i++) {
+                              if ((latestParts[i] || 0) > (currentParts[i] || 0)) {
+                                hasUpdate = true;
+                                break;
+                              } else if ((latestParts[i] || 0) < (currentParts[i] || 0)) {
+                                break;
+                              }
+                            }
+                            if (hasUpdate) {
+                              setUpdateStatus(`发现新版本 v${latestVersion}`);
+                              setDownloadUrl(dmgMatch[1]);
+                            } else {
+                              setUpdateStatus("已是最新版本");
+                            }
+                          } else {
+                            setUpdateStatus("检查失败：无法解析版本信息");
+                          }
+                        } else {
+                          setUpdateStatus("检查失败：API 返回异常");
+                        }
+                      } catch (e) {
+                        setUpdateStatus("检查更新失败: " + e);
+                      }
+                    }}
+                    style={{ padding: '6px 12px', fontSize: '13px' }}
+                  >
+                    {downloadUrl ? "下载" : "检查更新"}
+                  </button>
+                </div>
+              </div>
+
+              {/* 危险区域 */}
               <h3 style={{ marginTop: '20px', marginBottom: '12px', color: 'var(--error)' }}>危险区域</h3>
               <div className="settings-list">
                 <div className="setting-item" style={{ border: '1px solid var(--error)', borderRadius: '8px', padding: '12px' }}>
@@ -2060,38 +2141,7 @@ function App() {
         </nav>
         <div className="sidebar-footer">
           <div className="version" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>v1.1.0</span>
-            <button 
-              onClick={async () => {
-                try {
-                  const result = await invoke<{ success: boolean; output: string }>("run_command", { command: "cd ~/Desktop/openclaw-manager && git fetch origin && git status" });
-                  if (result.success) {
-                    if (result.output.includes("behind")) {
-                      alert("有新版本可用！请运行: cd ~/Desktop/openclaw-manager && git pull");
-                    } else {
-                      alert("已是最新版本");
-                    }
-                  }
-                } catch (e) {
-                  console.error("检查更新失败:", e);
-                }
-              }}
-              style={{ 
-                marginLeft: '8px',
-                fontSize: '11px', 
-                padding: '4px 10px',
-                background: 'var(--primary)',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              ✓ 检查更新
-            </button>
+            <span>v{appVersion}</span>
           </div>
         </div>
       </aside>

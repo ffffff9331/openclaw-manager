@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::env;
 use std::path::PathBuf;
-use std::fs::{OpenOptions, create_dir_all};
+use std::fs::{OpenOptions, create_dir_all, read_to_string};
 use std::io::Write;
 use simplelog::{CombinedLogger, WriteLogger, LevelFilter, Config};
 use log::{info, error, warn};
@@ -319,11 +319,42 @@ fn read_app_logs(lines: u32) -> String {
     }
 }
 
+// 获取 App 版本
+#[tauri::command]
+fn get_app_version() -> String {
+    // 从 tauri.conf.json 读取版本号
+    let exe_path = env::current_exe().unwrap_or_default();
+    let bundle_dir = exe_path.parent().and_then(|p| p.parent()).and_then(|p| p.parent());
+    
+    if let Some(bundle) = bundle_dir {
+        let conf_path = bundle.join("tauri.conf.json");
+        if conf_path.exists() {
+            if let Ok(content) = read_to_string(&conf_path) {
+                // 简单解析 version 字段
+                if let Some(start) = content.find("\"version\"") {
+                    if let Some(colon) = content[start..].find(':') {
+                        if let Some(quote1) = content[start + colon..].find('"') {
+                            if let Some(quote2) = content[start + colon + quote1 + 1..].find('"') {
+                                let version = &content[start + colon + quote1 + 1..start + colon + quote1 + 1 + quote2];
+                                return version.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 回退到默认版本
+    "1.1.0".to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         // .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             run_command,
@@ -331,7 +362,8 @@ pub fn run() {
             get_gateway_status,
             control_gateway,
             run_doctor,
-            read_app_logs
+            read_app_logs,
+            get_app_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -47,6 +47,10 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": []
     }
   }
 }
