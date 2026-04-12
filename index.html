@@ -1,13 +1,44 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>OpenClaw 管理助手</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #0f172a; }
+      #app-boot {
+        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); color: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Segoe UI', sans-serif; z-index: 9999;
+      }
+      .boot-card { width: min(560px, calc(100vw - 48px)); padding: 28px; border-radius: 20px; background: rgba(30,41,59,.88); border: 1px solid rgba(148,163,184,.18); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+      .boot-title { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+      .boot-desc { font-size: 14px; opacity: .85; margin-bottom: 14px; }
+      .boot-current { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: #e2e8f0; }
+      .boot-bar { height: 10px; border-radius: 999px; background: rgba(148,163,184,.16); overflow: hidden; }
+      .boot-bar > div { height: 100%; width: 40%; background: linear-gradient(90deg,#6366f1,#8b5cf6); border-radius: 999px; animation: boot-slide 1.2s ease-in-out infinite; }
+      .boot-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+      .boot-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(148,163,184,.18); background: rgba(15,23,42,.35); color: #cbd5e1; }
+      .boot-chip.done { color: #86efac; }
+      .boot-chip.pending { color: #fbbf24; }
+      .boot-chip.waiting { opacity: .72; }
+      .boot-chip.skipped { color: #fca5a5; }
+      .boot-tip { margin-top: 12px; font-size: 13px; color: #cbd5e1; }
+      @keyframes boot-slide { 0% { transform: translateX(-110%);} 50% { transform: translateX(90%);} 100% { transform: translateX(220%);} }
+    </style>
   </head>
-
   <body>
+    <div id="app-boot">
+      <div class="boot-card">
+        <div class="boot-title">🦞 OpenClaw 管理助手</div>
+        <div class="boot-desc">正在启动应用。先完成任务栏所需模块预加载，进入后再按需刷新。</div>
+        <div id="app-boot-current" class="boot-current">当前加载：准备启动…</div>
+        <div class="boot-bar"><div></div></div>
+        <div id="app-boot-steps" class="boot-steps"></div>
+        <div class="boot-tip">开发态较慢时，这里会持续显示当前加载到哪一块，避免白屏或主界面里再挂大加载条。</div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

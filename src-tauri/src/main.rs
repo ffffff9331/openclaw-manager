@@ -2,10 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::fs::{OpenOptions, create_dir_all};
-use std::io::Write;
 use std::path::PathBuf;
-use simplelog::{CombinedLogger, WriteLogger, LevelFilter, Config, TerminalMode};
-use log::{info, error, warn};
+use simplelog::{CombinedLogger, WriteLogger, LevelFilter, Config};
+use log::info;
 
 fn main() {
     // 初始化日志系统

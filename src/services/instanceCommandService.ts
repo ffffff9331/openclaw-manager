@@ -1,0 +1,64 @@
+import { requestWithInstance } from "../lib/instanceTransport";
+import { dispatchLocalCommand, readLocalCommand } from "./commandService";
+import type { AppInstance, CommandResult } from "../types/core";
+
+export type InstanceReadCommand = string;
+export type InstanceDispatchCommand = string;
+
+async function requestLocalRead(command: InstanceReadCommand): Promise<CommandResult> {
+  return readLocalCommand(command);
+}
+
+async function requestLocalDispatch(command: InstanceDispatchCommand): Promise<CommandResult> {
+  return dispatchLocalCommand(command);
+}
+
+async function requestRemoteCommand(instance: AppInstance, command: string): Promise<CommandResult> {
+  const result = await requestWithInstance(instance, {
+    path: instance.apiBasePath,
+    command,
+    accessMode: "dispatch",
+  });
+  if (typeof result === "object" && result && "success" in result) {
+    return result as CommandResult;
+  }
+  return {
+    success: false,
+    output: "",
+    error: "实例返回结果格式不正确",
+  };
+}
+
+export async function readFromInstance(instance: AppInstance | undefined, command: InstanceReadCommand): Promise<CommandResult> {
+  if (instance) {
+    if (instance.type === "local") {
+      return requestLocalRead(command);
+    }
+    return requestRemoteCommand(instance, command);
+  }
+
+  return requestLocalRead(command);
+}
+
+export async function dispatchToInstance(instance: AppInstance | undefined, command: InstanceDispatchCommand): Promise<CommandResult> {
+  if (instance) {
+    if (instance.type === "local") {
+      return requestLocalDispatch(command);
+    }
+    return requestRemoteCommand(instance, command);
+  }
+
+  return requestLocalDispatch(command);
+}
+
+export async function runInstanceCommand(instance: AppInstance | undefined, command: string): Promise<CommandResult> {
+  return dispatchToInstance(instance, command);
+}
+
+export async function runRequiredInstanceCommand(instance: AppInstance | undefined, command: string, fallbackMessage: string): Promise<string> {
+  const result = await dispatchToInstance(instance, command);
+  if (!result.success) {
+    throw new Error(result.error || result.output || fallbackMessage);
+  }
+  return result.output || "";
+}
