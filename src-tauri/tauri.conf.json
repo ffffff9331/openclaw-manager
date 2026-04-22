@@ -48,9 +48,7 @@
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ2RjNBNUMwQTBCNDU2NjQKUldSa1ZyU2d3S1h6MXBUbXUwRmNZOE16WnNQNnV5NjZINC8wUkhBSkJjMjlNMCt5ZlYyNWt0NTQK",
-      "endpoints": [
-        "https://github.com/ffffff9331/openclaw-manager/releases/latest/download/latest.json"
-      ]
+      "endpoints": []
     }
   }
 }
