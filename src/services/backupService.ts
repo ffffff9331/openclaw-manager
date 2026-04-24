@@ -59,6 +59,18 @@ export async function createBackup(options: BackupCreateOptions = {}, instance?:
     };
   }
 
+  if (instance.type === "wsl") {
+    const result = await dispatchToInstance(instance, command);
+    if (!result.success) {
+      throw new Error(result.error || result.output || "创建备份失败");
+    }
+    return {
+      command,
+      output: result.output || "命令已投递到 WSL2",
+      archivePath: extractArchivePath(result.output) || options.output?.trim() || undefined,
+    };
+  }
+
   const output = await runRequiredInstanceCommand(instance, command, "创建备份失败");
   return {
     command,
@@ -98,6 +110,18 @@ export async function restoreBackup(archivePath: string, instance?: AppInstance)
     return {
       command,
       output: result.output || "还原命令已投递",
+      archivePath: safePath,
+    };
+  }
+
+  if (instance.type === "wsl") {
+    const result = await dispatchToInstance(instance, command);
+    if (!result.success) {
+      throw new Error(result.error || result.output || "还原备份失败");
+    }
+    return {
+      command,
+      output: result.output || "还原命令已投递到 WSL2",
       archivePath: safePath,
     };
   }

@@ -155,6 +155,26 @@ fn dispatch_detached_shell_command(command: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+
+#[cfg(target_os = "windows")]
+fn escape_for_wsl_sh(command: &str) -> String {
+    command.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "windows")]
+fn run_wsl_command(command: &str) -> std::io::Result<std::process::Output> {
+    let wrapped = format!("{}", escape_for_wsl_sh(command));
+    Command::new("wsl.exe")
+        .args(["-e", "sh", "-lc", &wrapped])
+        .current_dir(get_default_dir())
+        .output()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_wsl_command(command: &str) -> std::io::Result<std::process::Output> {
+    run_shell_command(command)
+}
+
 // ─── 跨平台文件尾部读取 ───
 
 fn read_file_tail(path: &std::path::Path, lines: u32) -> String {
@@ -349,6 +369,46 @@ fn dispatch_detached_command(command: String) -> CommandResult {
     match dispatch_detached_shell_command(&command) {
         Ok(_) => build_command_result(true, "命令已投递".to_string(), None),
         Err(e) => build_command_result(false, String::new(), Some(e)),
+    }
+}
+
+
+#[tauri::command]
+fn read_wsl_command(command: String) -> CommandResult {
+    if !is_read_only_command(&command) {
+        return build_command_result(
+            false,
+            String::new(),
+            Some("该 WSL2 命令不是只读请求，请改走 dispatch 接口".to_string()),
+        );
+    }
+    execute_wsl_command(&command, "WSL_READ")
+}
+
+#[tauri::command]
+fn dispatch_wsl_command(command: String) -> CommandResult {
+    execute_wsl_command(&command, "WSL_DISPATCH")
+}
+
+fn execute_wsl_command(command: &str, log_prefix: &str) -> CommandResult {
+    match run_wsl_command(command) {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if out.status.success() {
+                info!("{} OK: {}", log_prefix, &command[..command.len().min(100)]);
+                build_command_result(true, stdout, if stderr.is_empty() { None } else { Some(stderr) })
+            } else {
+                warn!(
+                    "{} FAIL: {} - {}",
+                    log_prefix,
+                    &command[..command.len().min(100)],
+                    stderr.chars().take(100).collect::<String>()
+                );
+                build_command_result(false, stdout, Some(if stderr.is_empty() { format!("WSL2 命令退出码: {:?}", out.status.code()) } else { stderr }))
+            }
+        }
+        Err(e) => build_command_result(false, String::new(), Some(format!("WSL2 命令执行失败: {}", e))),
     }
 }
 
@@ -706,7 +766,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             run_command,
             read_command,
+            read_wsl_command,
             dispatch_command,
+            dispatch_wsl_command,
             dispatch_detached_command,
             get_env,
             get_gateway_status,

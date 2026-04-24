@@ -12,7 +12,7 @@ function isWebPreview() {
 }
 
 async function probeViaHttpHealth(instance: AppInstance): Promise<AppInstanceStatus> {
-  const healthUrl = isWebPreview() && instance.type === "local"
+  const healthUrl = isWebPreview() && (instance.type === "local" || instance.type === "wsl")
     ? "/__openclaw_health"
     : new URL(instance.healthPath || "/health", instance.baseUrl).toString();
 
@@ -20,7 +20,7 @@ async function probeViaHttpHealth(instance: AppInstance): Promise<AppInstanceSta
     const response = await fetch(healthUrl, { method: "GET" });
     return response.ok ? "online" : "offline";
   } catch {
-    return isWebPreview() && instance.type === "local" ? "unknown" : "offline";
+    return isWebPreview() && (instance.type === "local" || instance.type === "wsl") ? "unknown" : "offline";
   }
 }
 
@@ -41,7 +41,7 @@ async function probeLocalInstance(instance: AppInstance): Promise<AppInstanceSta
 }
 
 export async function probeInstanceStatus(instance: AppInstance): Promise<AppInstanceStatus> {
-  if (instance.type === "local") {
+  if (instance.type === "local" || instance.type === "wsl") {
     return probeLocalInstance(instance);
   }
 

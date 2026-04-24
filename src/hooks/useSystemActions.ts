@@ -47,7 +47,7 @@ export function useSystemActions({
   const [backupOptions, setBackupOptions] = useState<BackupCreateOptions>(INITIAL_BACKUP_OPTIONS);
 
   const installGuide = useMemo<InstallGuide>(() => getInstallGuide(currentInstance), [currentInstance]);
-  const canInstallOpenClaw = !currentInstance || currentInstance.type === "local";
+  const canInstallOpenClaw = !currentInstance || currentInstance.type === "local" || currentInstance.type === "wsl";
 
   const applySettingsToggle = useCallback(
     async (

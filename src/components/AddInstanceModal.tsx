@@ -9,7 +9,9 @@ interface AddInstanceModalProps {
     exists: boolean;
     running: boolean;
     baseUrl: string;
+    type?: AppInstance["type"];
     error?: string;
+    detail?: string;
   } | null;
   detectingLocal: boolean;
   onDetectLocal: () => void | Promise<void>;
@@ -56,7 +58,7 @@ export function AddInstanceModal({
   const [form, setForm] = useState<NewInstanceFormState>(defaultFormState);
 
   const validation = useMemo(() => {
-    if (form.type === "local") {
+    if (form.type === "local" || form.type === "wsl") {
       return { valid: true as const, warning: undefined, reason: undefined };
     }
     return validateInstanceBaseUrl(form.baseUrl, { allowLanAccess });
@@ -78,7 +80,7 @@ export function AddInstanceModal({
       return;
     }
 
-    if (form.type !== "local") {
+    if (form.type !== "local" && form.type !== "wsl") {
       if (!validation.valid) {
         alert(validation.reason || "实例地址不合法");
         return;
@@ -92,7 +94,7 @@ export function AddInstanceModal({
     onSubmit({
       name: trimmedName,
       type: form.type,
-      baseUrl: form.type === "local" ? "http://127.0.0.1:18789/" : form.baseUrl.trim(),
+      baseUrl: form.type === "local" || form.type === "wsl" ? "http://127.0.0.1:18789/" : form.baseUrl.trim(),
       apiBasePath: form.apiBasePath.trim() || "/",
       healthPath: form.healthPath.trim() || "/health",
       notes: form.notes.trim(),
@@ -123,7 +125,7 @@ export function AddInstanceModal({
               <div>
                 <div style={{ fontWeight: 600 }}>本机实例检测</div>
                 <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>
-                  先探测本机 `127.0.0.1:18789` 是否已有 OpenClaw 在运行，命中后可一键加入。
+                  先探测本机 `127.0.0.1:18789`；Windows 下若未命中，会继续检测 WSL2 内的 OpenClaw。
                 </div>
               </div>
               <button className="btn btn-secondary" onClick={() => void onDetectLocal()} disabled={detectingLocal}>
@@ -133,7 +135,9 @@ export function AddInstanceModal({
             {localInstanceStatus ? (
               <div style={{ marginTop: 10, fontSize: 13, color: "var(--text-secondary)", display: "grid", gap: 4 }}>
                 <div>检测地址：{localInstanceStatus.baseUrl}</div>
-                <div>检测结果：{localInstanceStatus.exists && localInstanceStatus.running ? "已发现可用本机实例" : "未发现可用本机实例"}</div>
+                <div>检测结果：{localInstanceStatus.exists && localInstanceStatus.running ? (localInstanceStatus.type === "wsl" ? "已发现可用 WSL2 OpenClaw" : "已发现可用本机实例") : "未发现可用本机实例"}</div>
+                {localInstanceStatus.type ? <div>实例类型：{localInstanceStatus.type === "wsl" ? "WSL2" : localInstanceStatus.type}</div> : null}
+                {localInstanceStatus.detail ? <div>检测详情：{localInstanceStatus.detail}</div> : null}
                 {localInstanceStatus.error ? <div>错误信息：{localInstanceStatus.error}</div> : null}
                 {localInstanceStatus.exists && localInstanceStatus.running ? (
                   <div style={{ marginTop: 6 }}>
@@ -158,7 +162,7 @@ export function AddInstanceModal({
               value={form.type}
               onChange={(e) => {
                 const nextType = e.target.value as AppInstance["type"];
-                const suggestedBaseUrl = nextType === "local"
+                const suggestedBaseUrl = nextType === "local" || nextType === "wsl"
                   ? "http://127.0.0.1:18789/"
                   : nextType === "docker"
                     ? "http://localhost:18789"
@@ -169,6 +173,7 @@ export function AddInstanceModal({
               }}
             >
               <option value="local">本机</option>
+              <option value="wsl">WSL2</option>
               <option value="docker">Docker</option>
               <option value="nas">NAS</option>
               <option value="remote">远端</option>
@@ -180,12 +185,14 @@ export function AddInstanceModal({
               value={form.baseUrl}
               onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
               placeholder={form.type === "docker" ? "http://localhost:18789" : form.type === "nas" ? "http://192.168.1.x:18789" : "http://127.0.0.1:18789/"}
-              disabled={form.type === "local"}
+              disabled={form.type === "local" || form.type === "wsl"}
             />
             <small>
               {form.type === "local"
                 ? "自动使用本机地址 http://127.0.0.1:18789/"
-                : form.type === "docker"
+                : form.type === "wsl"
+                  ? "Windows + WSL2：HTTP 地址仍优先使用 Windows 可访问的 127.0.0.1:18789，命令通过 wsl.exe 执行"
+                  : form.type === "docker"
                   ? "Docker 容器地址，如 http://localhost:18789 或 http://host.docker.internal:18789"
                   : form.type === "nas"
                     ? "NAS 局域网地址，如 http://192.168.x.x:18789 或 http://nas-name.local:18789"
@@ -193,10 +200,10 @@ export function AddInstanceModal({
                       ? "仅允许 localhost、127.0.0.1、局域网私有网段地址或 .local 主机名；非本机地址请确认可信。"
                       : "当前已关闭局域网访问，仅允许 localhost 或 127.0.0.1。"}
             </small>
-            {form.type !== "local" && !validation.valid && form.baseUrl.trim() ? (
+            {form.type !== "local" && form.type !== "wsl" && !validation.valid && form.baseUrl.trim() ? (
               <small style={{ color: "var(--error)" }}>{validation.reason}</small>
             ) : null}
-            {form.type !== "local" && validation.warning ? (
+            {form.type !== "local" && form.type !== "wsl" && validation.warning ? (
               <small style={{ color: "var(--warning, #d97706)" }}>{validation.warning}</small>
             ) : null}
           </div>

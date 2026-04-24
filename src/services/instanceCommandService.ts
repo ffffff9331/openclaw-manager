@@ -1,5 +1,5 @@
 import { requestWithInstance } from "../lib/instanceTransport";
-import { dispatchLocalCommand, readLocalCommand } from "./commandService";
+import { dispatchLocalCommand, dispatchWslCommand, readLocalCommand, readWslCommand } from "./commandService";
 import type { AppInstance, CommandResult } from "../types/core";
 
 export type InstanceReadCommand = string;
@@ -34,6 +34,9 @@ export async function readFromInstance(instance: AppInstance | undefined, comman
     if (instance.type === "local") {
       return requestLocalRead(command);
     }
+    if (instance.type === "wsl") {
+      return readWslCommand(command);
+    }
     return requestRemoteCommand(instance, command);
   }
 
@@ -44,6 +47,9 @@ export async function dispatchToInstance(instance: AppInstance | undefined, comm
   if (instance) {
     if (instance.type === "local") {
       return requestLocalDispatch(command);
+    }
+    if (instance.type === "wsl") {
+      return dispatchWslCommand(command);
     }
     return requestRemoteCommand(instance, command);
   }

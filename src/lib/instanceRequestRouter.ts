@@ -1,4 +1,4 @@
-import { dispatchLocalCommand, readLocalCommand } from "../services/commandService";
+import { dispatchLocalCommand, dispatchWslCommand, readLocalCommand, readWslCommand } from "../services/commandService";
 import type { AppInstance, CommandResult } from "../types/core";
 
 export interface InstanceRequestOptions {
@@ -13,16 +13,19 @@ export async function requestViaInstance(
   instance: AppInstance,
   options: InstanceRequestOptions,
 ): Promise<CommandResult | unknown> {
-  if (instance.type === "local") {
+  if (instance.type === "local" || instance.type === "wsl") {
     if (options.command) {
       const accessMode = options.accessMode ?? "dispatch";
+      if (instance.type === "wsl") {
+        return accessMode === "read" ? readWslCommand(options.command) : dispatchWslCommand(options.command);
+      }
       return accessMode === "read" ? readLocalCommand(options.command) : dispatchLocalCommand(options.command);
     }
 
     return {
       success: false,
       output: "",
-      error: "本地实例请求缺少 command 参数",
+      error: instance.type === "wsl" ? "WSL2 实例请求缺少 command 参数" : "本地实例请求缺少 command 参数",
     } satisfies CommandResult;
   }
 

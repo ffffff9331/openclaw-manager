@@ -109,7 +109,7 @@ async function getParsedModelsConfig(instance?: AppInstance): Promise<ModelsConf
 }
 
 export async function getRawModelsConfig(instance?: AppInstance) {
-  if ((!instance || instance.type === "local") && isWebPreview()) {
+  if ((!instance || instance.type === "local" || instance.type === "wsl") && isWebPreview()) {
     const response = await fetch("/__openclaw_models");
     return { success: response.ok, output: await response.text(), error: null } as CommandResult;
   }
@@ -157,7 +157,7 @@ export async function loadCurrentModel(instance?: AppInstance): Promise<CurrentM
   }
 
   let result: CommandResult;
-  if ((!instance || instance.type === "local") && isWebPreview()) {
+  if ((!instance || instance.type === "local" || instance.type === "wsl") && isWebPreview()) {
     const response = await fetch("/__openclaw_current_model");
     result = { success: response.ok, output: await response.text(), error: null };
   } else {

@@ -1,3 +1,4 @@
+import { readWslCommand } from "./commandService";
 import type { AppInstance, AppInstanceSource, AppInstanceStatus } from "../types/core";
 
 const STORAGE_KEY = "ocm.instances.v2";
@@ -99,7 +100,7 @@ function normalizeInstanceRecord(input: Partial<AppInstance> | null | undefined)
     return null;
   }
 
-  const normalizedType = input.type === "local" || input.type === "docker" || input.type === "nas" || input.type === "remote"
+  const normalizedType = input.type === "local" || input.type === "wsl" || input.type === "docker" || input.type === "nas" || input.type === "remote"
     ? input.type
     : "remote";
 
@@ -226,12 +227,16 @@ export function createManualInstance(input: CreateInstanceInput): AppInstance {
 
 const DEFAULT_LOCAL_URL = "http://127.0.0.1:18789/";
 
-export async function detectLocalInstance(): Promise<{
+export interface LocalInstanceDetectionResult {
   exists: boolean;
   running: boolean;
   baseUrl: string;
+  type?: AppInstance["type"];
   error?: string;
-}> {
+  detail?: string;
+}
+
+export async function detectLocalInstance(): Promise<LocalInstanceDetectionResult> {
   const baseUrl = DEFAULT_LOCAL_URL;
   try {
     const controller = new AbortController();
@@ -249,10 +254,24 @@ export async function detectLocalInstance(): Promise<{
     return { exists: true, running: true, baseUrl };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    const wslVersion = await readWslCommand("command -v openclaw >/dev/null 2>&1 && openclaw --version");
+    if (wslVersion.success) {
+      const wslStatus = await readWslCommand("openclaw gateway status --json");
+      return {
+        exists: true,
+        running: wslStatus.success,
+        baseUrl,
+        type: "wsl",
+        detail: wslVersion.output.trim(),
+        error: wslStatus.success ? undefined : wslStatus.error || wslStatus.output || "已检测到 WSL2 OpenClaw，但 Gateway 未运行或状态不可读",
+      };
+    }
+
+    const wslError = wslVersion.error || wslVersion.output;
     // Timeout or network error means not reachable
     if (errorMsg.includes("abort") || errorMsg.includes("Failed to fetch")) {
-      return { exists: false, running: false, baseUrl, error: "无法连接到本机实例" };
+      return { exists: false, running: false, baseUrl, error: `无法连接到本机实例；WSL2 也未检测到 OpenClaw${wslError ? `：${wslError}` : ""}` };
     }
-    return { exists: false, running: false, baseUrl, error: errorMsg };
+    return { exists: false, running: false, baseUrl, error: wslError ? `${errorMsg}；WSL2：${wslError}` : errorMsg };
   }
 }

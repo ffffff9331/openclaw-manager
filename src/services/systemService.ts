@@ -357,6 +357,14 @@ export async function runDoctorCommand(instance?: AppInstance) {
     return "诊断任务已投递；可用“刷新诊断结果”查看最近输出。";
   }
 
+  if (instance.type === "wsl") {
+    const result = await dispatchCommand(instance, "openclaw doctor >/tmp/openclaw-manager-doctor.log 2>&1");
+    if (!result.success) {
+      throw new Error(result.error || result.output || "诊断投递失败");
+    }
+    return "WSL2 诊断任务已投递；可用“刷新诊断结果”查看最近输出。";
+  }
+
   const result = await dispatchCommand(instance, "openclaw doctor");
   if (!result.success) {
     throw new Error(result.error || result.output || "诊断投递失败");

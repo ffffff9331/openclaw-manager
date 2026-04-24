@@ -1,7 +1,7 @@
 import type { AppInstance, InstallGuide } from "../types/core";
 import { isLocalInstance } from "../lib/instanceCapabilities";
 import { dispatchDetachedLocalCommand } from "./commandService";
-import { readFromInstance } from "./instanceCommandService";
+import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 
 const DOCKER_COMPOSE_TEMPLATE = `services:
   openclaw:
@@ -151,6 +151,10 @@ export async function checkOpenClawInstalled(instance?: AppInstance) {
 }
 
 export async function installOpenClaw(instance?: AppInstance) {
+  if (instance?.type === "wsl") {
+    return dispatchToInstance(instance, "npm install -g openclaw");
+  }
+
   if (!isLocalInstance(instance)) {
     throw new Error("当前仅支持本机实例自动安装；Docker / NAS / 远端实例请使用对应部署引导。");
   }

@@ -54,10 +54,14 @@ interface AppInstanceBase {
   updatedAt?: string;
 }
 
-export type AppInstanceType = "local" | "docker" | "nas" | "remote";
+export type AppInstanceType = "local" | "wsl" | "docker" | "nas" | "remote";
 
 export interface LocalAppInstance extends AppInstanceBase {
   type: "local";
+}
+
+export interface WslAppInstance extends AppInstanceBase {
+  type: "wsl";
 }
 
 export interface DockerAppInstance extends AppInstanceBase {
@@ -72,7 +76,7 @@ export interface RemoteAppInstance extends AppInstanceBase {
   type: "remote";
 }
 
-export type AppInstance = LocalAppInstance | DockerAppInstance | NasAppInstance | RemoteAppInstance;
+export type AppInstance = LocalAppInstance | WslAppInstance | DockerAppInstance | NasAppInstance | RemoteAppInstance;
 
 export interface AuditLogEntry {
   id: string;

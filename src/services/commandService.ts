@@ -30,11 +30,25 @@ export async function readLocalCommand(command: string): Promise<CommandResult> 
   return invoke<CommandResult>("read_command", { command });
 }
 
+export async function readWslCommand(command: string): Promise<CommandResult> {
+  if (!canUseTauriInvoke()) {
+    return getTauriUnavailableResult(`读取 WSL2 命令（${command}）`);
+  }
+  return invoke<CommandResult>("read_wsl_command", { command });
+}
+
 export async function dispatchLocalCommand(command: string): Promise<CommandResult> {
   if (!canUseTauriInvoke()) {
     return getTauriUnavailableResult(`投递命令（${command}）`);
   }
   return invoke<CommandResult>("dispatch_command", { command });
+}
+
+export async function dispatchWslCommand(command: string): Promise<CommandResult> {
+  if (!canUseTauriInvoke()) {
+    return getTauriUnavailableResult(`投递 WSL2 命令（${command}）`);
+  }
+  return invoke<CommandResult>("dispatch_wsl_command", { command });
 }
 
 export async function dispatchDetachedLocalCommand(command: string): Promise<CommandResult> {

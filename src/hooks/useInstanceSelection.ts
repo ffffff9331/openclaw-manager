@@ -18,7 +18,9 @@ export function useInstanceSelection() {
     exists: boolean;
     running: boolean;
     baseUrl: string;
+    type?: AppInstance["type"];
     error?: string;
+    detail?: string;
   } | null>(null);
   const [detectingLocal, setDetectingLocal] = useState(false);
 
@@ -64,7 +66,8 @@ export function useInstanceSelection() {
       return null;
     }
 
-    const existing = instances.find((item) => item.type === "local" && item.baseUrl === localInstanceStatus.baseUrl);
+    const detectedType = localInstanceStatus.type || "local";
+    const existing = instances.find((item) => item.type === detectedType && item.baseUrl === localInstanceStatus.baseUrl);
     if (existing) {
       setCurrentInstance(existing.id);
       setLocalInstanceStatus(null);
@@ -73,12 +76,12 @@ export function useInstanceSelection() {
     }
 
     const created = addInstance({
-      name: "本机 OpenClaw（自动检测）",
-      type: "local",
+      name: localInstanceStatus.type === "wsl" ? "WSL2 OpenClaw（自动检测）" : "本机 OpenClaw（自动检测）",
+      type: detectedType,
       baseUrl: localInstanceStatus.baseUrl,
       apiBasePath: "/",
       healthPath: "/health",
-      notes: "通过本机检测自动添加",
+      notes: localInstanceStatus.type === "wsl" ? "通过 Windows WSL2 检测自动添加，命令经 wsl.exe 桥接" : "通过本机检测自动添加",
       source: "discovered",
       status: "online",
     });
