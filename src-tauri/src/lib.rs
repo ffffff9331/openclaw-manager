@@ -172,8 +172,9 @@ fn build_wsl_shell_command(command: &str) -> String {
         "export PATH=\"$HOME/.local/bin:$HOME/bin:$HOME/.npm-global/bin:$HOME/.volta/bin:$HOME/.asdf/shims:/usr/local/bin:/usr/bin:/bin:$PATH\"; \
          [ -f /etc/profile ] && . /etc/profile >/dev/null 2>&1; \
          [ -f \"$HOME/.profile\" ] && . \"$HOME/.profile\" >/dev/null 2>&1; \
+         [ -f \"$HOME/.bash_profile\" ] && . \"$HOME/.bash_profile\" >/dev/null 2>&1; \
          [ -f \"$HOME/.bashrc\" ] && . \"$HOME/.bashrc\" >/dev/null 2>&1; \
-         {escaped}",
+         exec {escaped}",
     )
 }
 
@@ -181,7 +182,7 @@ fn build_wsl_shell_command(command: &str) -> String {
 fn run_wsl_command(command: &str) -> std::io::Result<std::process::Output> {
     let wrapped = build_wsl_shell_command(command);
     Command::new("wsl.exe")
-        .args(["-e", "bash", "-lc", &wrapped])
+        .args(["-e", "bash", "-lic", &wrapped])
         .output()
 }
 
