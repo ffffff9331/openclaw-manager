@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import type { AppInstance } from "../types/core";
-import { detectLocalInstance } from "../services/instanceService";
+import { detectInstances, detectLocalInstance, type DetectedInstance } from "../services/instanceService";
+
+const INSTANCE_TYPE_NAMES: Record<AppInstance["type"], string> = {
+  local: "本机",
+  wsl: "WSL2",
+  docker: "Docker",
+  nas: "NAS",
+  remote: "远端",
+};
 
 interface CreateInstanceInput {
   name: string;
@@ -14,6 +22,8 @@ interface CreateInstanceInput {
 
 export function useInstanceSelection() {
   const [showAddInstanceModal, setShowAddInstanceModal] = useState(false);
+
+  // 旧接口兼容
   const [localInstanceStatus, setLocalInstanceStatus] = useState<{
     exists: boolean;
     running: boolean;
@@ -23,6 +33,11 @@ export function useInstanceSelection() {
     detail?: string;
   } | null>(null);
   const [detectingLocal, setDetectingLocal] = useState(false);
+
+  // 新多实例检测
+  const [detectedInstances, setDetectedInstances] = useState<DetectedInstance[]>([]);
+  const [detectionErrors, setDetectionErrors] = useState<string[]>([]);
+  const [detecting, setDetecting] = useState(false);
 
   const instances = useAppStore((state) => state.instances);
   const currentInstanceId = useAppStore((state) => state.currentInstanceId);
@@ -44,6 +59,48 @@ export function useInstanceSelection() {
     setShowAddInstanceModal(false);
   };
 
+  /** 全面检测所有安装方式 */
+  const handleDetectInstances = async () => {
+    setDetecting(true);
+    setDetectedInstances([]);
+    setDetectionErrors([]);
+    try {
+      const result = await detectInstances();
+      setDetectedInstances(result.detected);
+      setDetectionErrors(result.errors);
+      // 同时更新旧接口状态以兼容 OverviewPage
+      if (result.detected.length > 0) {
+        const first = result.detected[0];
+        setLocalInstanceStatus({
+          exists: first.exists,
+          running: first.running,
+          baseUrl: first.baseUrl,
+          type: first.type,
+          detail: first.version || first.detail,
+          error: first.error,
+        });
+      } else {
+        setLocalInstanceStatus({
+          exists: false,
+          running: false,
+          baseUrl: "http://127.0.0.1:18789/",
+          error: "未检测到任何 OpenClaw 安装",
+        });
+      }
+    } catch (err) {
+      setLocalInstanceStatus({
+        exists: false,
+        running: false,
+        baseUrl: "http://127.0.0.1:18789/",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setDetecting(false);
+      setDetectingLocal(false);
+    }
+  };
+
+  /** 旧接口兼容：单实例检测 */
   const handleDetectLocalInstance = async () => {
     setDetectingLocal(true);
     try {
@@ -61,6 +118,40 @@ export function useInstanceSelection() {
     }
   };
 
+  /** 接入一个已检测到的实例 */
+  const handleAddDetectedInstance = (detected: DetectedInstance) => {
+    const existing = instances.find(
+      (item) => item.type === detected.type && item.baseUrl === detected.baseUrl,
+    );
+    if (existing) {
+      setCurrentInstance(existing.id);
+      return existing;
+    }
+
+    const label = INSTANCE_TYPE_NAMES[detected.type] || detected.type;
+    const notes = [
+      `通过自动检测添加（${label}）`,
+      detected.version ? `版本: ${detected.version}` : "",
+      detected.detail || "",
+    ].filter(Boolean).join("；");
+
+    const created = addInstance({
+      name: `${label} OpenClaw（自动检测）`,
+      type: detected.type,
+      baseUrl: detected.baseUrl,
+      apiBasePath: "/",
+      healthPath: "/health",
+      notes,
+      source: "discovered",
+      status: detected.running ? "online" : "unknown",
+    });
+    if (created?.id) {
+      setCurrentInstance(created.id);
+    }
+    return created;
+  };
+
+  /** 旧接口兼容 */
   const handleAddDetectedLocal = () => {
     if (!localInstanceStatus?.exists) {
       return null;
@@ -75,13 +166,14 @@ export function useInstanceSelection() {
       return existing;
     }
 
+    const label = INSTANCE_TYPE_NAMES[detectedType] || detectedType;
     const created = addInstance({
-      name: localInstanceStatus.type === "wsl" ? "WSL2 OpenClaw（自动检测）" : "本机 OpenClaw（自动检测）",
+      name: `${label} OpenClaw（自动检测）`,
       type: detectedType,
       baseUrl: localInstanceStatus.baseUrl,
       apiBasePath: "/",
       healthPath: "/health",
-      notes: localInstanceStatus.type === "wsl" ? "通过 Windows WSL2 检测自动添加，命令经 wsl.exe 桥接" : "通过本机检测自动添加",
+      notes: `通过自动检测添加（${label}）`,
       source: "discovered",
       status: "online",
     });
@@ -102,6 +194,13 @@ export function useInstanceSelection() {
     showAddInstanceModal,
     setShowAddInstanceModal,
     handleCreateInstance,
+    // 新多实例检测
+    detectedInstances,
+    detectionErrors,
+    detecting,
+    handleDetectInstances,
+    handleAddDetectedInstance,
+    // 旧接口兼容
     localInstanceStatus,
     detectingLocal,
     handleDetectLocalInstance,

@@ -1,10 +1,10 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::fs::{OpenOptions, create_dir_all};
-use std::path::PathBuf;
-use simplelog::{CombinedLogger, WriteLogger, LevelFilter, Config};
 use log::info;
+use simplelog::{CombinedLogger, Config, LevelFilter, WriteLogger};
+use std::fs::{create_dir_all, OpenOptions};
+use std::path::PathBuf;
 
 fn get_home_dir() -> PathBuf {
     std::env::var("HOME")
@@ -23,13 +23,16 @@ fn init_file_logger() {
     let Ok(log_file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&log_file_path) else {
+        .open(&log_file_path)
+    else {
         return;
     };
 
-    let _ = CombinedLogger::init(vec![
-        WriteLogger::new(LevelFilter::Info, Config::default(), log_file),
-    ]);
+    let _ = CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::Info,
+        Config::default(),
+        log_file,
+    )]);
 }
 
 fn main() {

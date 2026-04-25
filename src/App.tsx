@@ -33,6 +33,13 @@ function App() {
     showAddInstanceModal,
     setShowAddInstanceModal,
     handleCreateInstance,
+    // 新多实例检测
+    detectedInstances,
+    detectionErrors,
+    detecting,
+    handleDetectInstances,
+    handleAddDetectedInstance,
+    // 旧接口兼容
     localInstanceStatus,
     detectingLocal,
     handleDetectLocalInstance,
@@ -53,6 +60,14 @@ function App() {
       setRefreshingStatuses(false);
     }
   }, [setInstances]);
+
+  // 首次打开自动检测所有实例
+  useEffect(() => {
+    if (instances.length === 0 && !detecting && detectedInstances.length === 0) {
+      void handleDetectInstances();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (startupScheduledRef.current) {
@@ -120,18 +135,22 @@ function App() {
             setActiveTab={setActiveTab}
             onOpenAddInstance={async () => {
               setShowAddInstanceModal(true);
-              await handleDetectLocalInstance();
+              await handleDetectInstances();
             }}
             onAddDetectedLocal={async () => {
               await handleAddDetectedLocal();
             }}
-            detectingLocal={detectingLocal}
+            detectingLocal={detectingLocal || detecting}
             localInstanceStatus={localInstanceStatus ? {
               exists: Boolean(localInstanceStatus.exists),
               running: Boolean(localInstanceStatus.running),
               baseUrl: localInstanceStatus.baseUrl || "http://127.0.0.1:18789",
               error: localInstanceStatus.error || undefined,
             } : null}
+            detectedInstances={detectedInstances}
+            detectionErrors={detectionErrors}
+            onDetectInstances={handleDetectInstances}
+            onAddDetectedInstance={handleAddDetectedInstance}
             darkMode={darkMode}
             toggleTheme={toggleTheme}
             systemLoading={systemLoading}

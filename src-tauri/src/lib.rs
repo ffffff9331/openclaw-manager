@@ -15,7 +15,10 @@ fn get_home_dir() -> String {
         .or_else(|_| env::var("USERPROFILE"))
         .unwrap_or_else(|_| {
             if cfg!(windows) {
-                format!("C:\\Users\\{}", env::var("USERNAME").unwrap_or_else(|_| "user".into()))
+                format!(
+                    "C:\\Users\\{}",
+                    env::var("USERNAME").unwrap_or_else(|_| "user".into())
+                )
             } else {
                 "/Users/fan".into()
             }
@@ -38,7 +41,10 @@ fn get_openclaw_dir() -> PathBuf {
 }
 
 fn get_state_dir() -> PathBuf {
-    get_openclaw_dir().join("manager-runtime").join("gateway-control").join("state")
+    get_openclaw_dir()
+        .join("manager-runtime")
+        .join("gateway-control")
+        .join("state")
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -85,7 +91,8 @@ fn build_shell_path() -> String {
     let mut full_path = env::var("PATH").unwrap_or_default();
     let home = get_home_dir();
     let appdata = env::var("APPDATA").unwrap_or_else(|_| format!("{}\\AppData\\Roaming", home));
-    let localappdata = env::var("LOCALAPPDATA").unwrap_or_else(|_| format!("{}\\AppData\\Local", home));
+    let localappdata =
+        env::var("LOCALAPPDATA").unwrap_or_else(|_| format!("{}\\AppData\\Local", home));
     let program_files = env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".into());
 
     let extra_paths = [
@@ -155,7 +162,6 @@ fn dispatch_detached_shell_command(command: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-
 #[cfg(target_os = "windows")]
 fn escape_for_wsl_double_quotes(command: &str) -> String {
     command
@@ -184,6 +190,21 @@ fn run_wsl_command(command: &str) -> std::io::Result<std::process::Output> {
     Command::new("wsl.exe")
         .args(["-e", "bash", "-lic", &wrapped])
         .output()
+}
+
+#[cfg(target_os = "windows")]
+fn dispatch_detached_wsl_command(command: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    const DETACHED_PROCESS: u32 = 0x00000008;
+
+    let wrapped = build_wsl_shell_command(command);
+    Command::new("wsl.exe")
+        .args(["-e", "bash", "-lic", &wrapped])
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -243,7 +264,11 @@ fn get_env() -> String {
 }
 
 fn build_command_result(success: bool, output: String, error: Option<String>) -> CommandResult {
-    CommandResult { success, output, error }
+    CommandResult {
+        success,
+        output,
+        error,
+    }
 }
 
 fn is_read_only_command(command: &str) -> bool {
@@ -261,6 +286,25 @@ fn is_read_only_command(command: &str) -> bool {
         || normalized.starts_with("sw_vers ")
         || normalized == "ver"
         || normalized.starts_with("systeminfo")
+        || normalized.starts_with("docker ps ")
+        || normalized.starts_with("docker port ")
+        || normalized.starts_with("docker exec ") && is_docker_exec_read_only(normalized)
+}
+
+fn is_docker_exec_read_only(command: &str) -> bool {
+    // docker exec <container> openclaw --version
+    // docker exec <container> openclaw gateway status --json
+    let after_exec = command.strip_prefix("docker exec ").unwrap_or("");
+    // skip container name (first token after "docker exec ")
+    let after_container = after_exec
+        .split_whitespace()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .join(" ");
+    after_container.starts_with("openclaw --version")
+        || after_container.starts_with("openclaw gateway status")
+        || after_container.starts_with("openclaw status")
+        || after_container.starts_with("openclaw logs")
 }
 
 fn is_gateway_lifecycle_command(command: &str) -> bool {
@@ -308,7 +352,15 @@ fn execute_sync_command(command: &str, log_prefix: &str) -> CommandResult {
             }
 
             if out.status.success() {
-                build_command_result(true, stdout, if stderr.is_empty() { None } else { Some(stderr) })
+                build_command_result(
+                    true,
+                    stdout,
+                    if stderr.is_empty() {
+                        None
+                    } else {
+                        Some(stderr)
+                    },
+                )
             } else {
                 build_command_result(false, stdout, Some(stderr))
             }
@@ -347,7 +399,10 @@ fn dispatch_command(command: String) -> CommandResult {
         return build_command_result(
             false,
             String::new(),
-            Some("Gateway 生命周期动作必须走专用控制桥，不能通过通用 dispatch_command 执行".to_string()),
+            Some(
+                "Gateway 生命周期动作必须走专用控制桥，不能通过通用 dispatch_command 执行"
+                    .to_string(),
+            ),
         );
     }
     execute_dispatch_command(&command)
@@ -359,7 +414,10 @@ fn dispatch_detached_command(command: String) -> CommandResult {
         return build_command_result(
             false,
             String::new(),
-            Some("Gateway 生命周期动作必须走专用控制桥，不能通过通用 detached dispatch 执行".to_string()),
+            Some(
+                "Gateway 生命周期动作必须走专用控制桥，不能通过通用 detached dispatch 执行"
+                    .to_string(),
+            ),
         );
     }
 
@@ -368,7 +426,6 @@ fn dispatch_detached_command(command: String) -> CommandResult {
         Err(e) => build_command_result(false, String::new(), Some(e)),
     }
 }
-
 
 #[tauri::command]
 fn read_wsl_command(command: String) -> CommandResult {
@@ -394,7 +451,15 @@ fn execute_wsl_command(command: &str, log_prefix: &str) -> CommandResult {
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             if out.status.success() {
                 info!("{} OK: {}", log_prefix, &command[..command.len().min(100)]);
-                build_command_result(true, stdout, if stderr.is_empty() { None } else { Some(stderr) })
+                build_command_result(
+                    true,
+                    stdout,
+                    if stderr.is_empty() {
+                        None
+                    } else {
+                        Some(stderr)
+                    },
+                )
             } else {
                 warn!(
                     "{} FAIL: {} - {}",
@@ -402,10 +467,57 @@ fn execute_wsl_command(command: &str, log_prefix: &str) -> CommandResult {
                     &command[..command.len().min(100)],
                     stderr.chars().take(100).collect::<String>()
                 );
-                build_command_result(false, stdout, Some(if stderr.is_empty() { format!("WSL2 命令退出码: {:?}", out.status.code()) } else { stderr }))
+                build_command_result(
+                    false,
+                    stdout,
+                    Some(if stderr.is_empty() {
+                        format!("WSL2 命令退出码: {:?}", out.status.code())
+                    } else {
+                        stderr
+                    }),
+                )
             }
         }
-        Err(e) => build_command_result(false, String::new(), Some(format!("WSL2 命令执行失败: {}", e))),
+        Err(e) => build_command_result(
+            false,
+            String::new(),
+            Some(format!("WSL2 命令执行失败: {}", e)),
+        ),
+    }
+}
+
+fn parse_gateway_status_stdout(stdout: &str) -> Option<GatewayStatus> {
+    if let Ok(parsed) = serde_json::from_str::<GatewayStatus>(stdout) {
+        return Some(parsed);
+    }
+
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(GatewayStatus {
+        running: trimmed.contains("\"running\":true")
+            || trimmed.contains("\"status\":\"running\"")
+            || trimmed.contains("\"state\":\"active\""),
+        port: if trimmed.contains("18789") {
+            Some(18789)
+        } else {
+            None
+        },
+        uptime: None,
+    })
+}
+
+fn read_gateway_status_via(
+    command_runner: fn(&str) -> std::io::Result<std::process::Output>,
+) -> Option<GatewayStatus> {
+    match command_runner("openclaw gateway status --json") {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            parse_gateway_status_stdout(&stdout)
+        }
+        _ => None,
     }
 }
 
@@ -423,26 +535,19 @@ fn run_command(command: String) -> CommandResult {
 
 #[tauri::command]
 fn get_gateway_status() -> GatewayStatus {
-    let output = run_shell_command("openclaw gateway status --json");
+    if let Some(status) = read_gateway_status_via(run_shell_command) {
+        return status;
+    }
 
-    match output {
-        Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            if let Ok(parsed) = serde_json::from_str::<GatewayStatus>(&stdout) {
-                parsed
-            } else {
-                GatewayStatus {
-                    running: stdout.contains("\"running\":true"),
-                    port: if stdout.contains("18789") { Some(18789) } else { None },
-                    uptime: None,
-                }
-            }
-        }
-        _ => GatewayStatus {
-            running: false,
-            port: None,
-            uptime: None,
-        },
+    #[cfg(target_os = "windows")]
+    if let Some(status) = read_gateway_status_via(run_wsl_command) {
+        return status;
+    }
+
+    GatewayStatus {
+        running: false,
+        port: None,
+        uptime: None,
     }
 }
 
@@ -467,7 +572,17 @@ fn dispatch_gateway_action(action: &str) -> Result<String, String> {
 #[cfg(target_os = "windows")]
 fn dispatch_gateway_action(action: &str) -> Result<String, String> {
     let command = format!("openclaw gateway {}", action);
-    dispatch_detached_shell_command(&command).map(|_| match action {
+
+    let dispatcher = if run_shell_command("openclaw --version")
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+    {
+        dispatch_detached_shell_command(&command)
+    } else {
+        dispatch_detached_wsl_command(&command)
+    };
+
+    dispatcher.map(|_| match action {
         "start" => "Gateway 启动请求已接受并入队".to_string(),
         "stop" => "Gateway 停止请求已接受并入队".to_string(),
         "restart" => "Gateway 重启请求已接受并入队".to_string(),
@@ -500,15 +615,30 @@ fn run_doctor(check_type: String) -> String {
         "deep" => "openclaw doctor --deep",
         "config" => "openclaw config --fix",
         _ => {
-            if cfg!(windows) { "echo Unknown check type" } else { "echo 'Unknown check type'" }
+            if cfg!(windows) {
+                "echo Unknown check type"
+            } else {
+                "echo 'Unknown check type'"
+            }
         }
     };
 
-    match run_shell_command(command) {
+    let output = run_shell_command(command);
+    #[cfg(target_os = "windows")]
+    let output = match output {
+        Ok(out) if out.status.success() => Ok(out),
+        _ => run_wsl_command(command),
+    };
+
+    match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            if stdout.is_empty() { stderr } else { stdout }
+            if stdout.is_empty() {
+                stderr
+            } else {
+                stdout
+            }
         }
         Err(e) => e.to_string(),
     }
@@ -516,11 +646,23 @@ fn run_doctor(check_type: String) -> String {
 
 #[tauri::command]
 fn read_gateway_logs(lines: u32) -> String {
-    match run_shell_command(&format!("openclaw logs --limit {}", lines)) {
+    let command = format!("openclaw logs --limit {}", lines);
+    let output = run_shell_command(&command);
+    #[cfg(target_os = "windows")]
+    let output = match output {
+        Ok(out) if out.status.success() => Ok(out),
+        _ => run_wsl_command(&command),
+    };
+
+    match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            if stdout.trim().is_empty() { stderr } else { stdout }
+            if stdout.trim().is_empty() {
+                stderr
+            } else {
+                stdout
+            }
         }
         Err(e) => format!("读取 Gateway 日志失败: {}", e),
     }
@@ -561,7 +703,10 @@ fn read_gateway_control_state() -> String {
     }
 
     let read_state_file = |name: &str| -> String {
-        std::fs::read_to_string(state_dir.join(name)).unwrap_or_default().trim().to_string()
+        std::fs::read_to_string(state_dir.join(name))
+            .unwrap_or_default()
+            .trim()
+            .to_string()
     };
 
     let history_path = state_dir.join("launch-agent-history.log");
@@ -603,9 +748,7 @@ fn read_gateway_control_state() -> String {
     };
 
     #[cfg(not(target_os = "macos"))]
-    let (plist_exists, la_loaded, la_status) = {
-        (false, false, "not-applicable".to_string())
-    };
+    let (plist_exists, la_loaded, la_status) = { (false, false, "not-applicable".to_string()) };
 
     let state = serde_json::json!({
         "lastDispatch": read_state_file("last-dispatch.txt"),
@@ -646,7 +789,10 @@ fn manage_gateway_launch_agent_macos(action: String) -> Result<String, String> {
     let _ = create_dir_all(&state_dir);
 
     let home = get_home_dir();
-    let target = format!("{}/Library/LaunchAgents/{}.plist", home, GATEWAY_SERVICE_LABEL);
+    let target = format!(
+        "{}/Library/LaunchAgents/{}.plist",
+        home, GATEWAY_SERVICE_LABEL
+    );
     let domain = format!("gui/{}", {
         let uid_output = Command::new("id").args(["-u"]).output();
         uid_output
@@ -686,13 +832,17 @@ fn manage_gateway_launch_agent_macos(action: String) -> Result<String, String> {
             let _ = std::fs::write(&target, plist_content);
             "echo 'plist installed'".to_string()
         }
-        "load" => format!(
+        "load" => {
+            format!(
             "launchctl bootstrap {domain} '{target}' || launchctl kickstart -k {domain}/{label}",
             domain = domain, target = target, label = GATEWAY_SERVICE_LABEL
-        ),
+        )
+        }
         "unload" => format!(
             "launchctl bootout {domain} '{target}' || launchctl kill SIGTERM {domain}/{label}",
-            domain = domain, target = target, label = GATEWAY_SERVICE_LABEL
+            domain = domain,
+            target = target,
+            label = GATEWAY_SERVICE_LABEL
         ),
         "remove" => format!("rm -f '{}'", target),
         _ => return Err("无效的 LaunchAgent 操作".to_string()),
@@ -711,11 +861,20 @@ fn manage_gateway_launch_agent_macos(action: String) -> Result<String, String> {
     let mut history = std::fs::read_to_string(&history_path).unwrap_or_default();
     history.push_str(&format!("{} {} accepted\n", now, action));
     let _ = std::fs::write(&history_path, history);
-    let _ = std::fs::write(state_dir.join("last-launch-agent-action.txt"), format!("{} {}", now, action));
+    let _ = std::fs::write(
+        state_dir.join("last-launch-agent-action.txt"),
+        format!("{} {}", now, action),
+    );
     let _ = std::fs::write(state_dir.join("last-launch-agent-state.txt"), "queued");
-    let _ = std::fs::write(state_dir.join("last-launch-agent-started-at.txt"), now.clone());
+    let _ = std::fs::write(
+        state_dir.join("last-launch-agent-started-at.txt"),
+        now.clone(),
+    );
     let _ = std::fs::write(state_dir.join("last-launch-agent-finished-at.txt"), "");
-    let _ = std::fs::write(state_dir.join("last-launch-agent-result.txt"), format!("{} accepted", now));
+    let _ = std::fs::write(
+        state_dir.join("last-launch-agent-result.txt"),
+        format!("{} accepted", now),
+    );
 
     if action != "install" {
         let wrapped_command = format!(
@@ -756,13 +915,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if app.get_webview_window("main").is_none() {
-                let _window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .title("🦞 OpenClaw 管理助手")
-                    .inner_size(900.0, 650.0)
-                    .min_inner_size(700.0, 500.0)
-                    .center()
-                    .resizable(true)
-                    .build()?;
+                let _window =
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                        .title("🦞 OpenClaw 管理助手")
+                        .inner_size(900.0, 650.0)
+                        .min_inner_size(700.0, 500.0)
+                        .center()
+                        .resizable(true)
+                        .build()?;
             }
             Ok(())
         })

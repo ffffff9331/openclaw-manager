@@ -57,3 +57,19 @@ export async function dispatchDetachedLocalCommand(command: string): Promise<Com
   }
   return invoke<CommandResult>("dispatch_detached_command", { command });
 }
+
+// ─── Docker 命令桥 ───
+
+export async function readDockerCommand(containerName: string, command: string): Promise<CommandResult> {
+  if (!canUseTauriInvoke()) {
+    return getTauriUnavailableResult(`读取 Docker 命令（${command}）`);
+  }
+  return readLocalCommand(`docker exec ${containerName} ${command}`);
+}
+
+export async function dispatchDockerCommand(containerName: string, command: string): Promise<CommandResult> {
+  if (!canUseTauriInvoke()) {
+    return getTauriUnavailableResult(`投递 Docker 命令（${command}）`);
+  }
+  return dispatchLocalCommand(`docker exec ${containerName} ${command}`);
+}

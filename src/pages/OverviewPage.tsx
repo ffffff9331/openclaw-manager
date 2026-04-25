@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import type { TabKey } from "../components/AppSidebar";
 import type { GatewayActionFeedback } from "../hooks/useGatewayState";
 import type { AppInstance, GatewayControlState } from "../types/core";
+import type { DetectedInstance } from "../services/instanceService";
 import { getGatewayStatus } from "../services/gatewayService";
 import { loadCurrentModel } from "../services/modelService";
 import { getInstanceBoundaryHint, getInstanceCapabilitySummary, getInstanceTypeLabel } from "../lib/instanceCapabilities";
@@ -29,7 +30,20 @@ interface OverviewPageProps {
     error?: string;
   } | null;
   detectingLocal?: boolean;
+  // 多实例检测
+  detectedInstances?: DetectedInstance[];
+  detectionErrors?: string[];
+  onDetectInstances?: () => Promise<void>;
+  onAddDetectedInstance?: (d: DetectedInstance) => void;
 }
+
+const DETECTED_TYPE_LABELS: Record<string, string> = {
+  local: "本机宿主",
+  wsl: "WSL2",
+  docker: "Docker",
+  nas: "NAS",
+  remote: "远端",
+};
 
 type DeploymentState = "not-configured" | "runtime-ready" | "healthy" | "attention";
 type DeploymentPrimaryAction = "detect-local" | "start-gateway" | "refresh";
@@ -198,7 +212,7 @@ function getDeploymentCopy(
   };
 }
 
-export function OverviewPage({ instances, currentInstance, gatewayRunning, gatewayLoading, auditLogCount, currentModelLabel, currentModelLoading, onNavigate, onOpenAddInstance, onStartGateway, onRefreshRuntime, onAddDetectedLocal, gatewayControlState, localDetection, detectingLocal }: OverviewPageProps) {
+export function OverviewPage({ instances, currentInstance, gatewayRunning, gatewayLoading, auditLogCount, currentModelLabel, currentModelLoading, onNavigate, onOpenAddInstance, onStartGateway, onRefreshRuntime, onAddDetectedLocal, gatewayControlState, localDetection, detectingLocal, detectedInstances, detectionErrors, onDetectInstances, onAddDetectedInstance }: OverviewPageProps) {
   const onlineCount = instances.filter((item) => item.status === "online").length;
   const offlineCount = instances.filter((item) => item.status === "offline").length;
   const unknownCount = instances.filter((item) => item.status === "unknown").length;
@@ -446,6 +460,49 @@ export function OverviewPage({ instances, currentInstance, gatewayRunning, gatew
           <div style={{ color: "var(--text-secondary)" }}>当前未选择实例。</div>
         )}
       </div>
+
+      {/* 多实例检测结果 */}
+      {detectedInstances && detectedInstances.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h2>检测到的实例</h2>
+            <button className="btn btn-secondary btn-small" onClick={() => void onDetectInstances?.()} disabled={detectingLocal}>重新检测</button>
+          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {detectedInstances.map((d, i) => {
+              const typeLabel = DETECTED_TYPE_LABELS[d.type] || d.type;
+              const alreadyAdded = instances.some((inst) => inst.type === d.type && inst.baseUrl === d.baseUrl);
+              return (
+                <div key={`${d.type}-${i}`} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, background: "var(--bg-card)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{typeLabel} OpenClaw</div>
+                      <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>
+                        {d.baseUrl} · {d.running ? "运行中" : "未运行"}
+                        {d.version ? ` · ${d.version}` : ""}
+                        {d.detail ? ` · ${d.detail}` : ""}
+                      </div>
+                      {d.error && <div style={{ fontSize: 12, color: "var(--text-warning)", marginTop: 2 }}>{d.error}</div>}
+                    </div>
+                    <button
+                      className={alreadyAdded ? "btn btn-secondary btn-small" : "btn btn-primary btn-small"}
+                      disabled={alreadyAdded}
+                      onClick={() => onAddDetectedInstance?.(d)}
+                    >
+                      {alreadyAdded ? "已接入" : "接入"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {detectionErrors && detectionErrors.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-secondary)" }}>
+              {detectionErrors.map((e, i) => <div key={i}>{e}</div>)}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <div className="card-header">

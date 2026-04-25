@@ -1,5 +1,5 @@
 import { requestWithInstance } from "../lib/instanceTransport";
-import { dispatchLocalCommand, dispatchWslCommand, readLocalCommand, readWslCommand } from "./commandService";
+import { dispatchLocalCommand, dispatchWslCommand, readLocalCommand, readWslCommand, readDockerCommand, dispatchDockerCommand } from "./commandService";
 import type { AppInstance, CommandResult } from "../types/core";
 
 export type InstanceReadCommand = string;
@@ -29,6 +29,10 @@ async function requestRemoteCommand(instance: AppInstance, command: string): Pro
   };
 }
 
+function getDockerContainerName(instance: AppInstance): string {
+  return (instance as AppInstance & { containerName?: string }).containerName || "openclaw";
+}
+
 export async function readFromInstance(instance: AppInstance | undefined, command: InstanceReadCommand): Promise<CommandResult> {
   if (instance) {
     if (instance.type === "local") {
@@ -36,6 +40,9 @@ export async function readFromInstance(instance: AppInstance | undefined, comman
     }
     if (instance.type === "wsl") {
       return readWslCommand(command);
+    }
+    if (instance.type === "docker") {
+      return readDockerCommand(getDockerContainerName(instance), command);
     }
     return requestRemoteCommand(instance, command);
   }
@@ -50,6 +57,9 @@ export async function dispatchToInstance(instance: AppInstance | undefined, comm
     }
     if (instance.type === "wsl") {
       return dispatchWslCommand(command);
+    }
+    if (instance.type === "docker") {
+      return dispatchDockerCommand(getDockerContainerName(instance), command);
     }
     return requestRemoteCommand(instance, command);
   }

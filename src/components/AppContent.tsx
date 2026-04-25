@@ -18,6 +18,7 @@ import { useSystemState } from "../hooks/useSystemState";
 import { useTabRefresh } from "../hooks/useTabRefresh";
 import { useAppStore } from "../stores/appStore";
 import type { AppInstance } from "../types/core";
+import type { DetectedInstance } from "../services/instanceService";
 import type { TabKey } from "./AppSidebar";
 import type { useGatewayState } from "../hooks/useGatewayState";
 
@@ -37,6 +38,11 @@ interface AppContentProps {
   toggleTheme: () => void;
   systemLoading: string | null;
   gatewayState: ReturnType<typeof useGatewayState>;
+  // 多实例检测
+  detectedInstances?: DetectedInstance[];
+  detectionErrors?: string[];
+  onDetectInstances?: () => Promise<void>;
+  onAddDetectedInstance?: (d: DetectedInstance) => void;
 }
 
 export function AppContent({
@@ -50,6 +56,10 @@ export function AppContent({
   toggleTheme,
   systemLoading,
   gatewayState,
+  detectedInstances,
+  detectionErrors,
+  onDetectInstances,
+  onAddDetectedInstance,
 }: AppContentProps) {
   const instances = useAppStore((state) => state.instances);
   const currentInstanceId = useAppStore((state) => state.currentInstanceId);
@@ -85,6 +95,10 @@ export function AppContent({
           gatewayControlState={gatewayControlState}
           localInstanceStatus={localInstanceStatus ?? null}
           detectingLocal={detectingLocal}
+          detectedInstances={detectedInstances}
+          detectionErrors={detectionErrors}
+          onDetectInstances={onDetectInstances}
+          onAddDetectedInstance={onAddDetectedInstance}
           onStartGateway={async () => {
             return await handleGatewayControl("start");
           }}
@@ -125,6 +139,10 @@ function OverviewTabContent({
   detectingLocal,
   onStartGateway,
   onRefreshGateway,
+  detectedInstances,
+  detectionErrors,
+  onDetectInstances,
+  onAddDetectedInstance,
 }: {
   currentInstance: AppInstance | undefined;
   instances: AppInstance[];
@@ -143,6 +161,10 @@ function OverviewTabContent({
   detectingLocal: boolean;
   onStartGateway: () => Promise<void | import("../hooks/useGatewayState").GatewayActionFeedback>;
   onRefreshGateway: () => Promise<void>;
+  detectedInstances?: DetectedInstance[];
+  detectionErrors?: string[];
+  onDetectInstances?: () => Promise<void>;
+  onAddDetectedInstance?: (d: DetectedInstance) => void;
 }) {
   const modelsState = useModelsState({ currentInstance });
 
@@ -178,6 +200,10 @@ function OverviewTabContent({
       onRefreshRuntime={async () => {
         await Promise.allSettled([onRefreshGateway(), modelsState.refreshCurrentModel()]);
       }}
+      detectedInstances={detectedInstances}
+      detectionErrors={detectionErrors}
+      onDetectInstances={onDetectInstances}
+      onAddDetectedInstance={onAddDetectedInstance}
     />
   );
 }

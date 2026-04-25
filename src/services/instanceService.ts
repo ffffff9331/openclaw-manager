@@ -1,4 +1,4 @@
-import { canUseTauriInvoke, readWslCommand } from "./commandService";
+import { canUseTauriInvoke, readLocalCommand, readWslCommand } from "./commandService";
 import { isWindows } from "../lib/platform";
 import type { AppInstance, AppInstanceSource, AppInstanceStatus } from "../types/core";
 
@@ -239,6 +239,24 @@ export function createManualInstance(input: CreateInstanceInput): AppInstance {
 
 const DEFAULT_LOCAL_URL = "http://127.0.0.1:18789/";
 
+// ─── 多实例检测 ───
+
+export interface DetectedInstance {
+  type: AppInstance["type"];
+  exists: boolean;
+  running: boolean;
+  baseUrl: string;
+  version?: string;
+  detail?: string;
+  error?: string;
+}
+
+export interface InstanceDetectionResult {
+  detected: DetectedInstance[];
+  errors: string[];
+}
+
+/** 旧接口兼容 */
 export interface LocalInstanceDetectionResult {
   exists: boolean;
   running: boolean;
@@ -248,52 +266,168 @@ export interface LocalInstanceDetectionResult {
   detail?: string;
 }
 
-export async function detectLocalInstance(): Promise<LocalInstanceDetectionResult> {
-  const baseUrl = DEFAULT_LOCAL_URL;
+// ── 宿主本机探测 ──
+
+async function detectHostLocal(): Promise<DetectedInstance | null> {
+  if (!canUseTauriInvoke()) return null;
+  try {
+    const versionResult = await readLocalCommand("openclaw --version");
+    if (!versionResult.success) return null;
+    const statusResult = await readLocalCommand("openclaw gateway status --json");
+    const running = statusResult.success && parseGatewayRunningFromJson(statusResult.output);
+    return {
+      type: "local",
+      exists: true,
+      running,
+      baseUrl: DEFAULT_LOCAL_URL,
+      version: versionResult.output.trim(),
+      error: running ? undefined : "已检测到本机 OpenClaw，但 Gateway 当前未运行",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── WSL2 探测（仅 Windows）──
+
+async function detectWsl(): Promise<DetectedInstance | null> {
+  if (!isWindows() || !canUseTauriInvoke()) return null;
+  try {
+    const versionResult = await readWslCommand("command -v openclaw >/dev/null 2>&1 && openclaw --version");
+    if (!versionResult.success) return null;
+    const statusResult = await readWslCommand("openclaw gateway status --json");
+    const running = statusResult.success && parseGatewayRunningFromJson(statusResult.output);
+    return {
+      type: "wsl",
+      exists: true,
+      running,
+      baseUrl: DEFAULT_LOCAL_URL,
+      version: versionResult.output.trim(),
+      error: running ? undefined : "已检测到 WSL2 OpenClaw，但 Gateway 当前未运行",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Docker 探测 ──
+
+async function detectDocker(): Promise<DetectedInstance | null> {
+  if (!canUseTauriInvoke()) return null;
+  try {
+    const filterCmd = isWindows()
+      ? 'docker ps --filter "name=openclaw" --format "{{.Names}}" 2>nul'
+      : 'docker ps --filter "name=openclaw" --format "{{.Names}}" 2>/dev/null';
+    const findResult = await readLocalCommand(filterCmd);
+    if (!findResult.success) return null;
+    const containerName = findResult.output.trim().split("\n")[0]?.trim();
+    if (!containerName) return null;
+
+    const versionResult = await readLocalCommand(`docker exec ${containerName} openclaw --version`);
+    const version = versionResult.success ? versionResult.output.trim() : undefined;
+
+    const statusResult = await readLocalCommand(`docker exec ${containerName} openclaw gateway status --json`);
+    const running = statusResult.success && parseGatewayRunningFromJson(statusResult.output);
+
+    // 尝试获取容器映射端口
+    const portResult = await readLocalCommand(`docker port ${containerName} 18789`);
+    let baseUrl = DEFAULT_LOCAL_URL;
+    if (portResult.success && portResult.output.trim()) {
+      const portMatch = portResult.output.match(/(\d+\.\d+\.\d+\.\d+):(\d+)/);
+      if (portMatch) {
+        const host = portMatch[1] === "0.0.0.0" ? "127.0.0.1" : portMatch[1];
+        baseUrl = `http://${host}:${portMatch[2]}/`;
+      }
+    }
+
+    return {
+      type: "docker",
+      exists: true,
+      running,
+      baseUrl,
+      version,
+      detail: `容器: ${containerName}`,
+      error: running ? undefined : `已检测到 Docker 容器 ${containerName}，但 Gateway 当前未运行`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── HTTP 端口探测（兜底）──
+
+async function detectHttpReachable(): Promise<DetectedInstance | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    const response = await fetch(baseUrl, {
+    await fetch(DEFAULT_LOCAL_URL, {
       method: "GET",
       signal: controller.signal,
       mode: "no-cors",
     });
     clearTimeout(timeoutId);
-
-    // no-cors returns opaque response, which we treat as "might be running"
-    // If we got here without error, the port is reachable
-    return { exists: true, running: true, baseUrl };
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    if (!isWindows() || !canUseTauriInvoke()) {
-      if (errorMsg.includes("abort") || errorMsg.includes("Failed to fetch")) {
-        return { exists: false, running: false, baseUrl, error: "无法连接到本机实例" };
-      }
-      return { exists: false, running: false, baseUrl, error: errorMsg };
-    }
-
-    const wslVersion = await readWslCommand("command -v openclaw >/dev/null 2>&1 && openclaw --version");
-    if (wslVersion.success) {
-      const wslStatus = await readWslCommand("openclaw gateway status --json");
-      const wslRunning = wslStatus.success && parseGatewayRunningFromJson(wslStatus.output);
-      return {
-        exists: true,
-        running: wslRunning,
-        baseUrl,
-        type: "wsl",
-        detail: wslVersion.output.trim(),
-        error: wslStatus.success
-          ? (wslRunning ? undefined : "已检测到 WSL2 OpenClaw，但 Gateway 当前未运行")
-          : wslStatus.error || wslStatus.output || "已检测到 WSL2 OpenClaw，但 Gateway 状态不可读",
-      };
-    }
-
-    const wslError = wslVersion.error || wslVersion.output;
-    // Timeout or network error means not reachable
-    if (errorMsg.includes("abort") || errorMsg.includes("Failed to fetch")) {
-      return { exists: false, running: false, baseUrl, error: `无法连接到本机实例；WSL2 也未检测到 OpenClaw${wslError ? `：${wslError}` : ""}` };
-    }
-    return { exists: false, running: false, baseUrl, error: wslError ? `${errorMsg}；WSL2：${wslError}` : errorMsg };
+    return {
+      type: "local",
+      exists: true,
+      running: true,
+      baseUrl: DEFAULT_LOCAL_URL,
+      detail: "通过 HTTP 端口探测发现",
+    };
+  } catch {
+    return null;
   }
+}
+
+/**
+ * 全面检测当前机器上所有可能的 OpenClaw 安装方式。
+ *
+ * 检测顺序：宿主本机 → WSL2 → Docker → HTTP 端口兜底。
+ * 返回所有检测到的实例，由调用方决定接入哪个。
+ */
+export async function detectInstances(): Promise<InstanceDetectionResult> {
+  const detected: DetectedInstance[] = [];
+  const errors: string[] = [];
+
+  const [hostLocal, wsl, docker, httpReachable] = await Promise.allSettled([
+    detectHostLocal(),
+    detectWsl(),
+    detectDocker(),
+    detectHttpReachable(),
+  ]);
+
+  const extract = (settled: PromiseSettledResult<DetectedInstance | null>, label: string) => {
+    if (settled.status === "fulfilled" && settled.value) {
+      detected.push(settled.value);
+    } else if (settled.status === "rejected") {
+      errors.push(`${label} 探测失败: ${settled.reason}`);
+    }
+  };
+
+  extract(hostLocal, "本机宿主");
+  extract(wsl, "WSL2");
+  extract(docker, "Docker");
+
+  // 只有命令探测全空时才用 HTTP 兜底
+  if (detected.length === 0) {
+    extract(httpReachable, "HTTP 端口");
+  }
+
+  return { detected, errors };
+}
+
+/** 旧接口兼容：返回第一个检测到的实例 */
+export async function detectLocalInstance(): Promise<LocalInstanceDetectionResult> {
+  const { detected } = await detectInstances();
+  if (detected.length === 0) {
+    return { exists: false, running: false, baseUrl: DEFAULT_LOCAL_URL, error: "未检测到任何 OpenClaw 安装" };
+  }
+  const first = detected[0];
+  return {
+    exists: first.exists,
+    running: first.running,
+    baseUrl: first.baseUrl,
+    type: first.type,
+    detail: first.version || first.detail,
+    error: first.error,
+  };
 }
