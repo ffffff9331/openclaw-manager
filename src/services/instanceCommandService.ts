@@ -5,6 +5,27 @@ import type { AppInstance, CommandResult } from "../types/core";
 export type InstanceReadCommand = string;
 export type InstanceDispatchCommand = string;
 
+const STRICT_INSTANCE_COMMAND_PREFIXES = [
+  "openclaw gateway ",
+  "openclaw logs",
+  "openclaw config get",
+  "openclaw config set",
+  "openclaw config unset",
+];
+
+function shouldRequireExplicitInstance(command: string) {
+  const normalized = command.trim();
+  return STRICT_INSTANCE_COMMAND_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function buildMissingInstanceResult(command: string): CommandResult {
+  return {
+    success: false,
+    output: "",
+    error: `命令需要显式实例上下文，已阻止默认回退到本机 local：${command}`,
+  };
+}
+
 async function requestLocalRead(command: InstanceReadCommand): Promise<CommandResult> {
   return readLocalCommand(command);
 }
@@ -47,6 +68,10 @@ export async function readFromInstance(instance: AppInstance | undefined, comman
     return requestRemoteCommand(instance, command);
   }
 
+  if (shouldRequireExplicitInstance(command)) {
+    return buildMissingInstanceResult(command);
+  }
+
   return requestLocalRead(command);
 }
 
@@ -62,6 +87,10 @@ export async function dispatchToInstance(instance: AppInstance | undefined, comm
       return dispatchDockerCommand(getDockerContainerName(instance), command);
     }
     return requestRemoteCommand(instance, command);
+  }
+
+  if (shouldRequireExplicitInstance(command)) {
+    return buildMissingInstanceResult(command);
   }
 
   return requestLocalDispatch(command);

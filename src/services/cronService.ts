@@ -7,6 +7,8 @@ import type {
 } from "../types/core";
 import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 
+const NO_INSTANCE_CRON_MESSAGE = "请先选择要操作的实例，Cron 页不再默认回退到本机 local。";
+
 function parseJsonOutput<T>(output: string, fallbackMessage: string): T {
   try {
     return JSON.parse(output) as T;
@@ -106,6 +108,9 @@ function buildEditCronCommand(jobId: string, form: CronJobFormState): string {
 }
 
 async function readRequired(instance: AppInstance | undefined, command: string, fallbackMessage: string): Promise<string> {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_CRON_MESSAGE);
+  }
   const result = await readFromInstance(instance, command);
   if (!result.success) {
     throw new Error(result.error || result.output || fallbackMessage);
@@ -114,6 +119,9 @@ async function readRequired(instance: AppInstance | undefined, command: string, 
 }
 
 async function dispatchRequired(instance: AppInstance | undefined, command: string, fallbackMessage: string): Promise<string> {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_CRON_MESSAGE);
+  }
   const result = await dispatchToInstance(instance, command);
   if (!result.success) {
     throw new Error(result.error || result.output || fallbackMessage);

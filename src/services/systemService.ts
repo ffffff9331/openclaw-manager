@@ -60,6 +60,7 @@ const EMPTY_UPDATE_RESULT: UpdateCheckResult = {
   updateAvailable: false,
   latestVersion: "",
 };
+const NO_INSTANCE_SYSTEM_MESSAGE = "请先选择要操作的实例，系统页不再默认回退到本机 local。";
 
 const SYSTEM_INFO_CACHE_TTL_MS = 30_000;
 const systemInfoCache = new Map<string, CachedLoadedSystemState>();
@@ -125,6 +126,10 @@ async function dispatchCommand(instance: AppInstance | undefined, command: strin
 }
 
 async function loadLogs(lines: number, instance?: AppInstance) {
+  if (!instance) {
+    return NO_INSTANCE_SYSTEM_MESSAGE;
+  }
+
   if (!isLocalInstance(instance)) {
     const result = await runReadCommand(instance, `openclaw logs --limit ${lines}`);
     return result.success ? result.output : result.error || "";
@@ -138,6 +143,10 @@ async function loadLogs(lines: number, instance?: AppInstance) {
 }
 
 async function loadDoctorResult(lines: number, instance?: AppInstance) {
+  if (!instance) {
+    return NO_INSTANCE_SYSTEM_MESSAGE;
+  }
+
   if (!isLocalInstance(instance)) {
     const result = await runReadCommand(instance, `openclaw logs --limit ${lines}`);
     return result.success ? result.output : result.error || "";

@@ -2,12 +2,18 @@ import type { AppInstance } from "../types/core";
 import { isLocalInstance } from "../lib/instanceCapabilities";
 import { dispatchToInstance } from "./instanceCommandService";
 
+const NO_INSTANCE_CHANNEL_RUNTIME_MESSAGE = "请先选择要操作的实例，频道 runtime 变更不再默认回退到本机 local。";
+
 /**
  * 频道配置变更后，通知 Gateway 重载配置
  * 本地实例走 CLI 重启，远端实例走 HTTP API
  */
 export async function applyChannelRuntimeChanges(instance?: AppInstance): Promise<string> {
-  if (!instance || isLocalInstance(instance)) {
+  if (!instance) {
+    return NO_INSTANCE_CHANNEL_RUNTIME_MESSAGE;
+  }
+
+  if (isLocalInstance(instance)) {
     try {
       const result = await dispatchToInstance(instance, "openclaw gateway restart");
       if (result.success) {

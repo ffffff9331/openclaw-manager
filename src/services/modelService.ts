@@ -23,6 +23,7 @@ interface CachedCurrentModelEntry {
 const MODEL_READ_CACHE_TTL_MS = 30_000;
 const modelConfigsCache = new Map<string, CachedModelConfigsEntry>();
 const currentModelCache = new Map<string, CachedCurrentModelEntry>();
+const NO_INSTANCE_MODELS_MESSAGE = "请先选择要操作的实例，模型页不再默认回退到本机 local。";
 
 export interface ModelConnectivityResult {
   ok: boolean;
@@ -109,7 +110,11 @@ async function getParsedModelsConfig(instance?: AppInstance): Promise<ModelsConf
 }
 
 export async function getRawModelsConfig(instance?: AppInstance) {
-  if ((!instance || instance.type === "local" || instance.type === "wsl") && isWebPreview()) {
+  if (!instance) {
+    return { success: false, output: "", error: NO_INSTANCE_MODELS_MESSAGE } as CommandResult;
+  }
+
+  if ((instance.type === "local" || instance.type === "wsl") && isWebPreview()) {
     const response = await fetch("/__openclaw_models");
     return { success: response.ok, output: await response.text(), error: null } as CommandResult;
   }
@@ -156,8 +161,14 @@ export async function loadCurrentModel(instance?: AppInstance): Promise<CurrentM
     return cached.value;
   }
 
+  if (!instance) {
+    const empty = { model: "", provider: "" };
+    currentModelCache.set(cacheKey, { value: empty, at: Date.now() });
+    return empty;
+  }
+
   let result: CommandResult;
-  if ((!instance || instance.type === "local" || instance.type === "wsl") && isWebPreview()) {
+  if ((instance.type === "local" || instance.type === "wsl") && isWebPreview()) {
     const response = await fetch("/__openclaw_current_model");
     result = { success: response.ok, output: await response.text(), error: null };
   } else {
@@ -184,6 +195,7 @@ export async function loadCurrentModel(instance?: AppInstance): Promise<CurrentM
 }
 
 export async function addModelConfig(newModelConfig: ModelFormState, instance?: AppInstance) {
+  if (!instance) throw new Error(NO_INSTANCE_MODELS_MESSAGE);
   if (!newModelConfig.name || !newModelConfig.id || !newModelConfig.baseUrl) return;
   const providerConfig = buildProviderConfig(newModelConfig);
   const providerName = `custom-${Date.now()}`;
@@ -210,6 +222,7 @@ export function validateModelForm(form: ModelFormState) {
 }
 
 export async function saveModelEdit(editingModel: ModelConfig, form: ModelFormState, instance?: AppInstance) {
+  if (!instance) throw new Error(NO_INSTANCE_MODELS_MESSAGE);
   validateModelForm(form);
   const provider = editingModel.provider;
   const providerConfig = buildProviderConfig(form);
@@ -220,6 +233,7 @@ export async function saveModelEdit(editingModel: ModelConfig, form: ModelFormSt
 }
 
 export async function setDefaultModel(modelId: string, provider: string, instance?: AppInstance) {
+  if (!instance) throw new Error(NO_INSTANCE_MODELS_MESSAGE);
   const modelKey = `${provider}/${modelId}`;
   await dispatchModelCommand(instance, `openclaw config set agents.defaults.model ${shellQuote(modelKey)}`);
   await dispatchModelCommand(instance, `openclaw config set agents.defaults.models.${modelKey.replace(/\//g, "\\/")}.alias ${shellQuote(modelId)}`);
@@ -230,6 +244,7 @@ export function canDeleteModelProvider(provider: string) {
 }
 
 export async function deleteModel(provider: string, modelId: string, instance?: AppInstance) {
+  if (!instance) throw new Error(NO_INSTANCE_MODELS_MESSAGE);
   const config = await getParsedModelsConfig(instance);
   const providerConfig = config.providers?.[provider];
   const models = Array.isArray(providerConfig?.models) ? [...providerConfig.models] : [];
@@ -248,6 +263,7 @@ export async function deleteModel(provider: string, modelId: string, instance?: 
 }
 
 export async function moveModel(provider: string, modelId: string, direction: "up" | "down", instance?: AppInstance) {
+  if (!instance) throw new Error(NO_INSTANCE_MODELS_MESSAGE);
   const config = await getParsedModelsConfig(instance);
   const providerConfig = config.providers?.[provider];
   const models = Array.isArray(providerConfig?.models) ? [...providerConfig.models] : [];

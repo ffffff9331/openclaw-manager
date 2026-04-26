@@ -13,6 +13,7 @@ import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 const GATEWAY_STATUS_JSON_COMMAND = "openclaw gateway status --json";
 const GATEWAY_LOGS_COMMAND = "openclaw logs --limit 50";
 const LOCAL_GATEWAY_LOG_LINES = 50;
+const NO_INSTANCE_GATEWAY_MESSAGE = "请先选择要操作的实例，当前页不再默认回退到本机 local。";
 
 function canUseTauriInvoke() {
   if (typeof window === "undefined") return false;
@@ -62,34 +63,31 @@ function normalizeGatewayStatus(raw: any): GatewayStatus {
 }
 
 export async function getGatewayStatus(instance?: AppInstance): Promise<GatewayStatus> {
+  if (!instance) {
+    return { running: false };
+  }
+
   try {
-    if (instance && !canUseTauriInvoke() && isLocalInstance(instance)) {
+    if (!canUseTauriInvoke() && isLocalInstance(instance)) {
       const response = await fetch("/__openclaw_gateway_status");
       if (response.ok) {
         return normalizeGatewayStatus(await response.json());
       }
     }
 
-    if (instance) {
-      const result = await requestWithInstance(instance, {
-        path: instance.healthPath,
-        command: GATEWAY_STATUS_JSON_COMMAND,
-        accessMode: "read",
-      });
+    const result = await requestWithInstance(instance, {
+      path: instance.healthPath,
+      command: GATEWAY_STATUS_JSON_COMMAND,
+      accessMode: "read",
+    });
 
-      if (typeof result === "object" && result && "success" in result) {
-        const commandResult = result as { success: boolean; output?: string };
-        if (commandResult.success && commandResult.output?.trim()) {
-          return normalizeGatewayStatus(JSON.parse(commandResult.output));
-        }
-      } else if (result) {
-        return normalizeGatewayStatus(result);
+    if (typeof result === "object" && result && "success" in result) {
+      const commandResult = result as { success: boolean; output?: string };
+      if (commandResult.success && commandResult.output?.trim()) {
+        return normalizeGatewayStatus(JSON.parse(commandResult.output));
       }
-    }
-
-    const result = await readFromInstance(undefined, GATEWAY_STATUS_JSON_COMMAND);
-    if (result.success && result.output?.trim()) {
-      return normalizeGatewayStatus(JSON.parse(result.output));
+    } else if (result) {
+      return normalizeGatewayStatus(result);
     }
   } catch {
     // fallback below
@@ -103,6 +101,10 @@ export async function getGatewayStatus(instance?: AppInstance): Promise<GatewayS
 }
 
 export async function fetchGatewayLogs(instance?: AppInstance) {
+  if (!instance) {
+    return NO_INSTANCE_GATEWAY_MESSAGE;
+  }
+
   if (!isLocalInstance(instance) || isWslInstance(instance)) {
     const result = await readFromInstance(instance, GATEWAY_LOGS_COMMAND);
     return result.success ? result.output : result.error || "";
@@ -168,6 +170,10 @@ export async function getGatewayControlState(instance?: AppInstance): Promise<Ga
 }
 
 export async function getGatewayDashboardUrl(instance?: AppInstance) {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_GATEWAY_MESSAGE);
+  }
+
   const result = await readFromInstance(instance, "openclaw gateway status");
 
   let url = instance?.baseUrl || "http://127.0.0.1:18789/";
@@ -202,6 +208,10 @@ function unwrapGatewayCommandOutput(
 }
 
 export async function controlGateway(action: "start" | "stop" | "restart", instance?: AppInstance): Promise<string> {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_GATEWAY_MESSAGE);
+  }
+
   const command = `openclaw gateway ${action}`;
 
   if (isLocalInstance(instance) && !isWslInstance(instance)) {
@@ -219,6 +229,10 @@ export async function controlGateway(action: "start" | "stop" | "restart", insta
 }
 
 export async function manageGatewayLaunchAgent(action: "install" | "load" | "unload" | "remove", instance?: AppInstance): Promise<string> {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_GATEWAY_MESSAGE);
+  }
+
   if (!supportsHostServiceManagement(instance)) {
     throw new Error("当前实例不是本机；服务管理属于本机宿主能力，请在对应机器或容器平台侧处理。");
   }

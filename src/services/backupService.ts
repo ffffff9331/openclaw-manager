@@ -2,6 +2,8 @@ import type { AppInstance, BackupArtifact, BackupCreateOptions, CommandResult } 
 import { dispatchDetachedLocalCommand } from "./commandService";
 import { dispatchToInstance, readFromInstance, runRequiredInstanceCommand } from "./instanceCommandService";
 
+const NO_INSTANCE_BACKUP_MESSAGE = "请先选择要操作的实例，备份页不再默认回退到本机 local。";
+
 function quoteShellArg(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
@@ -47,7 +49,11 @@ function extractArchivePath(output: string) {
 export async function createBackup(options: BackupCreateOptions = {}, instance?: AppInstance): Promise<BackupArtifact> {
   const command = buildBackupCreateCommand(options);
 
-  if (!instance || instance.type === "local") {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_BACKUP_MESSAGE);
+  }
+
+  if (instance.type === "local") {
     const result = await dispatchDetachedLocalCommand(command);
     if (!result.success) {
       throw new Error(result.error || result.output || "创建备份失败");
@@ -102,7 +108,11 @@ export async function restoreBackup(archivePath: string, instance?: AppInstance)
 
   const command = `openclaw backup restore ${quoteShellArg(safePath)}`;
 
-  if (!instance || instance.type === "local") {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_BACKUP_MESSAGE);
+  }
+
+  if (instance.type === "local") {
     const result = await dispatchDetachedLocalCommand(command);
     if (!result.success) {
       throw new Error(result.error || result.output || "还原备份失败");
@@ -135,5 +145,8 @@ export async function restoreBackup(archivePath: string, instance?: AppInstance)
 }
 
 export async function previewBackup(options: BackupCreateOptions = {}, instance?: AppInstance): Promise<CommandResult> {
+  if (!instance) {
+    return { success: false, output: "", error: NO_INSTANCE_BACKUP_MESSAGE };
+  }
   return readFromInstance(instance, buildBackupCreateCommand({ ...options, dryRun: true }));
 }

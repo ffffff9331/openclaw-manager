@@ -4,6 +4,8 @@ import { supportsHostFileOps } from "../lib/instanceCapabilities";
 import type { AppInstance, CommandResult } from "../types/core";
 import { dispatchToInstance } from "./instanceCommandService";
 
+const NO_INSTANCE_SKILL_MESSAGE = "请先选择要操作的实例，技能页不再默认回退到本机 local。";
+
 export interface SkillItem {
   name: string;
   enabled: boolean;
@@ -45,6 +47,9 @@ function parseSkillList(output: string): SkillItem[] {
 }
 
 export async function listSkills(instance?: AppInstance): Promise<SkillItem[]> {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_SKILL_MESSAGE);
+  }
   const command = "openclaw skills list";
   const result = await dispatchToInstance(instance, command);
   if (!result.success) {
@@ -54,6 +59,9 @@ export async function listSkills(instance?: AppInstance): Promise<SkillItem[]> {
 }
 
 export async function setSkillEnabled(name: string, enabled: boolean, instance?: AppInstance): Promise<CommandResult> {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_SKILL_MESSAGE);
+  }
   const action = enabled ? "enable" : "disable";
   return dispatchToInstance(instance, `openclaw skills ${action} ${JSON.stringify(name)}`);
 }

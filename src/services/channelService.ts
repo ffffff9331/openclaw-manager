@@ -11,6 +11,8 @@ import type {
 } from "../types/core";
 import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 
+const NO_INSTANCE_CHANNEL_MESSAGE = "请先选择要操作的实例，频道页不再默认回退到本机 local。";
+
 export const defaultChannels: Channel[] = [
   { id: "telegram", name: "Telegram", icon: "✈️", status: "not_configured", enabled: false, platform: "telegram" },
   { id: "discord", name: "Discord", icon: "🎮", status: "not_configured", enabled: false, platform: "discord" },
@@ -162,6 +164,9 @@ async function dispatchChannelCommand(instance: AppInstance | undefined, command
 }
 
 async function loadRawChannelConfig(channelId: string, instance?: AppInstance) {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_CHANNEL_MESSAGE);
+  }
   const result = await readChannelCommand(instance, `openclaw config get ${getChannelConfigPath(channelId)}`);
   return result.success ? parseOpenClawJson(result.output) : {};
 }
@@ -188,6 +193,9 @@ async function loadMappedChannelConfig<K extends ChannelId>(channelId: K, instan
 }
 
 async function setConfig(path: string, value: string | boolean, instance?: AppInstance) {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_CHANNEL_MESSAGE);
+  }
   const formatted = typeof value === "boolean" ? String(value) : value;
   await dispatchChannelCommand(instance, `openclaw config set ${path} ${formatted}`);
 }
@@ -330,6 +338,10 @@ function attachRuntimeSession(channel: Channel, sessions: RuntimeSessionRow[]): 
 }
 
 export async function fetchChannelsStatus(instance?: AppInstance, baseChannels: Channel[] = defaultChannels): Promise<Channel[]> {
+  if (!instance) {
+    return baseChannels;
+  }
+
   const result = await readChannelCommand(instance, OPENCLAW_STATUS_COMMAND);
   if (!result.success) return baseChannels;
 

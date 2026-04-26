@@ -3,6 +3,8 @@ import { isLocalInstance } from "../lib/instanceCapabilities";
 import { dispatchDetachedLocalCommand } from "./commandService";
 import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 
+const NO_INSTANCE_INSTALL_GUIDE_MESSAGE = "请先选择要操作的实例，安装引导页不再默认回退到本机 local。";
+
 const DOCKER_COMPOSE_TEMPLATE = `services:
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
@@ -147,11 +149,18 @@ export function getInstallGuide(instance?: AppInstance): InstallGuide {
 }
 
 export async function checkOpenClawInstalled(instance?: AppInstance) {
+  if (!instance) {
+    return { success: false, output: "", error: NO_INSTANCE_INSTALL_GUIDE_MESSAGE };
+  }
   return readFromInstance(instance, "openclaw --version");
 }
 
 export async function installOpenClaw(instance?: AppInstance) {
-  if (instance?.type === "wsl") {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_INSTALL_GUIDE_MESSAGE);
+  }
+
+  if (instance.type === "wsl") {
     return dispatchToInstance(instance, "npm install -g openclaw");
   }
 
