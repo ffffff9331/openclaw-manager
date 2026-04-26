@@ -314,6 +314,109 @@ fn is_gateway_lifecycle_command(command: &str) -> bool {
         || normalized == "openclaw gateway restart"
 }
 
+#[cfg(target_os = "windows")]
+fn decode_windows_console_bytes(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+
+    let utf8 = String::from_utf8_lossy(bytes);
+    if !utf8.contains(' ') && !utf8.contains('�') {
+        return utf8.into_owned();
+    }
+
+    let utf16: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect();
+    let utf16_text = String::from_utf16_lossy(&utf16);
+    if !utf16_text.trim().is_empty() && !utf16_text.contains('�') {
+        return utf16_text;
+    }
+
+    fn decode_gbk(bytes: &[u8]) -> Option<String> {
+        const REPLACEMENT: char = '�';
+        let mut out = String::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b < 0x80 {
+                out.push(b as char);
+                i += 1;
+                continue;
+            }
+            if i + 1 >= bytes.len() {
+                return None;
+            }
+            let pair = ((b as u16) << 8) | bytes[i + 1] as u16;
+            let ch = match pair {
+                0xB2BB => '不', 0xCAC7 => '是', 0xC4DA => '内', 0xB2BF => '部', 0xBBD2 => '或',
+                0xCDE2 => '外', 0xC3FC => '命', 0xC1EE => '令', 0xD2B2 => '也', 0xBFD8 => '可',
+                0xD4CB => '运', 0xD0D0 => '行', 0xB3CC => '程', 0xD0F2 => '序', 0xC5FA => '批',
+                0xB4A6 => '处', 0xC0ED => '理', 0xCEC4 => '文', 0xBCFE => '件',
+                _ => REPLACEMENT,
+            };
+            if ch == REPLACEMENT {
+                return None;
+            }
+            out.push(ch);
+            i += 2;
+        }
+        Some(out)
+    }
+
+    decode_gbk(bytes).unwrap_or_else(|| utf8.into_owned())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn decode_stdout(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+#[cfg(target_os = "windows")]
+fn decode_stdout(bytes: &[u8]) -> String {
+    decode_windows_console_bytes(bytes)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn decode_stderr(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+#[cfg(target_os = "windows")]
+fn decode_stderr(bytes: &[u8]) -> String {
+    let decoded = decode_windows_console_bytes(bytes);
+    if decoded.contains("不是内部或外部命令") && decoded.contains("openclaw") {
+        return "Windows 宿主未找到 openclaw 命令；当前更像是 OpenClaw 运行在 WSL2，而 Manager 这次读命令打到了 Windows 本机。请切换到 WSL2 实例，或在 Windows 宿主安装 openclaw CLI。".to_string();
+    }
+    decoded
+}
+
+#[cfg(target_os = "windows")]
+fn should_retry_via_wsl(command: &str, stderr: &str) -> bool {
+    let normalized = command.trim();
+    let openclaw_read = normalized.starts_with("openclaw ") && !is_gateway_lifecycle_command(normalized);
+    openclaw_read && stderr.contains("openclaw") && stderr.contains("不是内部或外部命令")
+}
+
+#[cfg(target_os = "windows")]
+fn try_run_with_wsl_fallback(command: &str) -> (std::process::Output, bool) {
+    match run_shell_command(command) {
+        Ok(out) => {
+            let stderr = decode_stderr(&out.stderr);
+            if out.status.success() || !should_retry_via_wsl(command, &stderr) {
+                (out, false)
+            } else {
+                match run_wsl_command(command) {
+                    Ok(wsl_out) => (wsl_out, true),
+                    Err(_) => (out, false),
+                }
+            }
+        }
+        Err(_) => unreachable!(),
+    }
+}
+
 fn execute_sync_command(command: &str, log_prefix: &str) -> CommandResult {
     if command == "DEBUG_PATH" {
         return build_command_result(
@@ -333,12 +436,16 @@ fn execute_sync_command(command: &str, log_prefix: &str) -> CommandResult {
         return build_command_result(false, String::new(), Some("Empty command".to_string()));
     }
 
+    #[cfg(target_os = "windows")]
+    let output = run_shell_command(command).map(|_| try_run_with_wsl_fallback(command).0);
+
+    #[cfg(not(target_os = "windows"))]
     let output = run_shell_command(command);
 
     match output {
         Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let stdout = decode_stdout(&out.stdout);
+            let stderr = decode_stderr(&out.stderr);
 
             if out.status.success() {
                 info!("{} OK: {}", log_prefix, &command[..command.len().min(100)]);
@@ -447,8 +554,8 @@ fn dispatch_wsl_command(command: String) -> CommandResult {
 fn execute_wsl_command(command: &str, log_prefix: &str) -> CommandResult {
     match run_wsl_command(command) {
         Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let stdout = decode_stdout(&out.stdout);
+            let stderr = decode_stderr(&out.stderr);
             if out.status.success() {
                 info!("{} OK: {}", log_prefix, &command[..command.len().min(100)]);
                 build_command_result(

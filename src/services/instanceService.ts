@@ -381,7 +381,7 @@ async function detectHttpReachable(): Promise<DetectedInstance | null> {
 /**
  * 全面检测当前机器上所有可能的 OpenClaw 安装方式。
  *
- * 检测顺序：宿主本机 → WSL2 → Docker → HTTP 端口兜底。
+ * 检测顺序：WSL2（Windows）→ 宿主本机 → Docker → HTTP 端口兜底。
  * 返回所有检测到的实例，由调用方决定接入哪个。
  */
 export async function detectInstances(): Promise<InstanceDetectionResult> {
@@ -403,8 +403,13 @@ export async function detectInstances(): Promise<InstanceDetectionResult> {
     }
   };
 
-  extract(hostLocal, "本机宿主");
-  extract(wsl, "WSL2");
+  if (isWindows()) {
+    extract(wsl, "WSL2");
+    extract(hostLocal, "本机宿主");
+  } else {
+    extract(hostLocal, "本机宿主");
+    extract(wsl, "WSL2");
+  }
   extract(docker, "Docker");
 
   // 只有命令探测全空时才用 HTTP 兜底
