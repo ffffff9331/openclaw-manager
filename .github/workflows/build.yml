@@ -33,15 +33,13 @@ jobs:
           targets: aarch64-apple-darwin
       - run: npm ci
       - name: Build Tauri macOS bundles
-        run: npm run tauri build -- --target aarch64-apple-darwin --bundles app,dmg
+        run: npm run tauri build -- --target aarch64-apple-darwin --bundles dmg
       - name: Upload macOS assets to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
-            src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app.tar.gz
-            src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.app.tar.gz.sig
           draft: false
           prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
           append_body: true
@@ -65,14 +63,12 @@ jobs:
           targets: x86_64-pc-windows-msvc
       - run: npm ci
       - name: Build Tauri Windows bundles
-        run: npm run tauri build -- --target x86_64-pc-windows-msvc --bundles msi,nsis
+        run: npm run tauri build -- --target x86_64-pc-windows-msvc --bundles nsis
       - name: Upload Windows assets to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.msi
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.msi.sig
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.exe.sig
           draft: false
@@ -102,15 +98,13 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: npm ci
       - name: Build Tauri Linux bundles
-        run: npm run tauri build -- --target x86_64-unknown-linux-gnu --bundles appimage,deb
+        run: npm run tauri build -- --target x86_64-unknown-linux-gnu --bundles appimage
       - name: Upload Linux assets to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/**/*.AppImage
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/**/*.deb
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/**/*.deb.sig
           draft: false
           prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
           append_body: true
