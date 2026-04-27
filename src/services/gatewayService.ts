@@ -176,7 +176,7 @@ export async function getGatewayDashboardUrl(instance?: AppInstance) {
 
   const result = await readFromInstance(instance, "openclaw gateway status");
 
-  let url = instance?.baseUrl || "http://127.0.0.1:18789/";
+  let url = instance.baseUrl;
   if (result.success) {
     const match = result.output.match(/Dashboard:\s*(https?:\/\/[^\s]+)/);
     if (match) url = match[1];

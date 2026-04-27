@@ -326,7 +326,7 @@ function buildSystemInfo(snapshot: SystemSnapshot, updates: { openclawUpdate: Up
 }
 
 function getSystemInfoCacheKey(instance?: AppInstance, shouldCheckUpdates?: boolean) {
-  const instanceKey = instance ? `${instance.type}:${instance.id}:${instance.baseUrl}` : "local:default";
+  const instanceKey = instance ? `${instance.type}:${instance.id}:${instance.baseUrl}` : "no-instance";
   return `${instanceKey}:updates:${shouldCheckUpdates ? "on" : "off"}`;
 }
 
@@ -358,7 +358,11 @@ export async function loadSystemInfo(
 }
 
 export async function runDoctorCommand(instance?: AppInstance) {
-  if (!instance || instance.type === "local") {
+  if (!instance) {
+    throw new Error(NO_INSTANCE_SYSTEM_MESSAGE);
+  }
+
+  if (instance.type === "local") {
     const result = await dispatchDetachedLocalCommand("openclaw doctor >/tmp/openclaw-manager-doctor.log 2>&1");
     if (!result.success) {
       throw new Error(result.error || result.output || "诊断投递失败");

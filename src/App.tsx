@@ -144,7 +144,7 @@ function App() {
             localInstanceStatus={localInstanceStatus ? {
               exists: Boolean(localInstanceStatus.exists),
               running: Boolean(localInstanceStatus.running),
-              baseUrl: localInstanceStatus.baseUrl || "http://127.0.0.1:18789",
+              baseUrl: localInstanceStatus.baseUrl,
               error: localInstanceStatus.error || undefined,
             } : null}
             detectedInstances={detectedInstances}

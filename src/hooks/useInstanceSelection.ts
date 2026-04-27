@@ -83,7 +83,7 @@ export function useInstanceSelection() {
         setLocalInstanceStatus({
           exists: false,
           running: false,
-          baseUrl: "http://127.0.0.1:18789/",
+          baseUrl: "",
           error: "未检测到任何 OpenClaw 安装",
         });
       }
@@ -91,7 +91,7 @@ export function useInstanceSelection() {
       setLocalInstanceStatus({
         exists: false,
         running: false,
-        baseUrl: "http://127.0.0.1:18789/",
+        baseUrl: "",
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -110,7 +110,7 @@ export function useInstanceSelection() {
       setLocalInstanceStatus({
         exists: false,
         running: false,
-        baseUrl: "http://127.0.0.1:18789/",
+        baseUrl: "",
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
