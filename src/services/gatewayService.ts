@@ -181,6 +181,13 @@ export async function getGatewayDashboardUrl(instance?: AppInstance) {
     const match = result.output.match(/Dashboard:\s*(https?:\/\/[^\s]+)/);
     if (match) url = match[1];
   }
+
+  // 添加 token 参数
+  if (instance.apiKey) {
+    const separator = url.includes('?') ? '&' : '?';
+    url = `${url}${separator}token=${encodeURIComponent(instance.apiKey)}`;
+  }
+
   return url;
 }
 
