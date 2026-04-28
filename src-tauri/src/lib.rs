@@ -127,10 +127,14 @@ fn run_shell_command(command: &str) -> std::io::Result<std::process::Output> {
 
 #[cfg(target_os = "windows")]
 fn run_shell_command(command: &str) -> std::io::Result<std::process::Output> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
     Command::new("cmd")
         .args(["/C", command])
         .current_dir(get_default_dir())
         .env("PATH", build_shell_path())
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
 }
 
@@ -186,9 +190,13 @@ fn build_wsl_shell_command(command: &str) -> String {
 
 #[cfg(target_os = "windows")]
 fn run_wsl_command(command: &str) -> std::io::Result<std::process::Output> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
     let wrapped = build_wsl_shell_command(command);
     Command::new("wsl.exe")
         .args(["-e", "bash", "-lic", &wrapped])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
 }
 
@@ -401,6 +409,9 @@ fn should_retry_via_wsl(command: &str, stderr: &str) -> bool {
 
 #[cfg(target_os = "windows")]
 fn try_run_with_wsl_fallback(command: &str) -> (std::process::Output, bool) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
     match run_shell_command(command) {
         Ok(out) => {
             let stderr = decode_stderr(&out.stderr);

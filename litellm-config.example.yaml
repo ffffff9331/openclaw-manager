@@ -1,0 +1,46 @@
+model_list:
+  # OpenAI 模型
+  - model_name: gpt-4
+    litellm_params:
+      model: openai/gpt-4
+      api_key: ${OPENAI_API_KEY}
+  
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: openai/gpt-3.5-turbo
+      api_key: ${OPENAI_API_KEY}
+
+  # Anthropic Claude 模型
+  - model_name: claude-3-opus
+    litellm_params:
+      model: anthropic/claude-3-opus-20240229
+      api_key: ${ANTHROPIC_API_KEY}
+  
+  - model_name: claude-3-sonnet
+    litellm_params:
+      model: anthropic/claude-3-sonnet-20240229
+      api_key: ${ANTHROPIC_API_KEY}
+
+  # 自定义 API 端点示例
+  - model_name: custom-model
+    litellm_params:
+      model: openai/gpt-4  # 使用 OpenAI 兼容格式
+      api_base: https://your-api-endpoint.com/v1
+      api_key: ${CUSTOM_API_KEY}
+
+# 通用设置
+litellm_settings:
+  # 启用详细日志
+  set_verbose: true
+  # 请求超时（秒）
+  request_timeout: 600
+  # 启用流式响应
+  stream: true
+
+# 使用说明：
+# 1. 复制此文件为 litellm-config.yaml
+# 2. 设置环境变量或直接替换 ${API_KEY}
+# 3. 在 docker-compose.yml 中取消注释 litellm 服务
+# 4. 在 OpenClaw 配置中添加 LiteLLM 作为 provider：
+#    baseUrl: http://litellm:4000
+#    或局域网访问：http://localhost:4000

@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  openclaw:
+    image: openclaw/openclaw:latest
+    container_name: openclaw
+    restart: unless-stopped
+    ports:
+      - "18789:18789"  # Gateway 端口
+    volumes:
+      # 配置目录（必需）
+      - ./openclaw-data:/root/.openclaw
+      # 工作区目录（必需）
+      - ./openclaw-workspace:/root/.openclaw/workspace
+      # 日志目录（可选）
+      - ./openclaw-logs:/root/.openclaw/logs
+    environment:
+      # 时区设置
+      - TZ=Asia/Shanghai
+      # Gateway 配置
+      - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_GATEWAY_HOST=0.0.0.0
+      # 默认模型（可选）
+      - OPENCLAW_DEFAULT_MODEL=gpt-4
+    networks:
+      - openclaw-network
+    # 使用 host 网络模式可以简化局域网访问（可选）
+    # network_mode: host
+
+  # LiteLLM 代理（可选，用于统一模型接口）
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"  # LiteLLM 端口
+    volumes:
+      # LiteLLM 配置文件
+      - ./litellm-config.yaml:/app/config.yaml
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    networks:
+      - openclaw-network
+    # 如果不需要 LiteLLM，可以注释掉整个 service
+
+networks:
+  openclaw-network:
+    driver: bridge
+
+# 使用说明：
+# 1. 创建必要的目录：
+#    mkdir -p openclaw-data openclaw-workspace openclaw-logs
+#
+# 2. （可选）创建 LiteLLM 配置文件：
+#    参考 litellm-config.example.yaml
+#
+# 3. 启动服务：
+#    docker-compose up -d
+#
+# 4. 查看日志：
+#    docker-compose logs -f openclaw
+#
+# 5. 停止服务：
+#    docker-compose down
+#
+# 6. 在 openclaw manager 中添加实例：
+#    - 类型：docker
+#    - 地址：http://localhost:18789
+#    - 或使用局域网 IP：http://192.168.x.x:18789
+
+# 常见问题：
+# Q: 容器无法访问宿主机服务？
+# A: 使用 host.docker.internal（Mac/Windows）或 172.17.0.1（Linux）
+#
+# Q: 权限问题？
+# A: 确保挂载目录有正确的权限：chmod -R 755 openclaw-*
+#
+# Q: 局域网无法访问？
+# A: 检查防火墙，或使用 network_mode: host

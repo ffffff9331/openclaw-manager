@@ -6,6 +6,10 @@ import { dispatchToInstance } from "./instanceCommandService";
 
 const NO_INSTANCE_INSTALL_MESSAGE = "请先选择要操作的实例，安装/卸载操作不再默认回退到本机 local。";
 
+function getInstallCommand(): string {
+  return "npm install -g openclaw@latest";
+}
+
 function getRemoveDataCommand(instance?: AppInstance): string {
   if (instance?.type === "wsl") {
     return "rm -rf ~/.openclaw";
@@ -18,6 +22,14 @@ function getRemoveDataCommand(instance?: AppInstance): string {
 
 function getUninstallCommand(): string {
   return "npm uninstall -g openclaw";
+}
+
+function getCheckInstalledCommand(): string {
+  return "openclaw --version";
+}
+
+function getStartGatewayCommand(): string {
+  return "openclaw gateway start";
 }
 
 async function dispatchHighImpactCommand(instance: AppInstance | undefined, command: string): Promise<CommandResult> {
@@ -33,6 +45,55 @@ async function dispatchHighImpactCommand(instance: AppInstance | undefined, comm
     return dispatchDetachedLocalCommand(command);
   }
   return dispatchToInstance(instance, command);
+}
+
+export async function checkOpenClawInstalled(instance?: AppInstance): Promise<{ installed: boolean; version?: string }> {
+  if (!instance) {
+    return { installed: false };
+  }
+
+  const result = await dispatchHighImpactCommand(instance, getCheckInstalledCommand());
+  if (result.success && result.output) {
+    const version = result.output.trim();
+    return { installed: true, version };
+  }
+  return { installed: false };
+}
+
+export async function installOpenClaw(instance?: AppInstance): Promise<{ success: boolean; output: string; error?: string }> {
+  if (!instance) {
+    return {
+      success: false,
+      output: "",
+      error: NO_INSTANCE_INSTALL_MESSAGE,
+    };
+  }
+
+  const result = await dispatchHighImpactCommand(instance, getInstallCommand());
+  if (!result.success) {
+    return {
+      success: false,
+      output: result.output,
+      error: result.error || "安装 OpenClaw 失败",
+    };
+  }
+
+  return {
+    success: true,
+    output: result.output,
+  };
+}
+
+export async function startOpenClawGateway(instance?: AppInstance): Promise<CommandResult> {
+  if (!instance) {
+    return {
+      success: false,
+      output: "",
+      error: NO_INSTANCE_INSTALL_MESSAGE,
+    };
+  }
+
+  return dispatchHighImpactCommand(instance, getStartGatewayCommand());
 }
 
 export async function removeOpenClawData(instance?: AppInstance) {
