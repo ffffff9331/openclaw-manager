@@ -130,7 +130,12 @@ const channelConfigSpecs: { [K in ChannelId]: ChannelConfigSpec<K> } = {
 
 function parseOpenClawJson(output: string): Record<string, unknown> {
   if (!output) return {};
-  const cleanOutput = output.replace(/^\[plugins\].*$/gm, "").trim();
+  // 移除警告、装饰字符和 OpenClaw banner
+  const lines = output.split('\n');
+  const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
+  if (jsonStart === -1) return {};
+  const jsonLines = lines.slice(jsonStart);
+  const cleanOutput = jsonLines.join('\n').trim();
   try {
     return JSON.parse(cleanOutput || "{}");
   } catch (error) {

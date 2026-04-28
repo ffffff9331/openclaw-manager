@@ -4,7 +4,13 @@ import { readFromInstance } from "./instanceCommandService";
 function parseGatewayRunningFromJson(raw?: string): boolean {
   if (!raw?.trim()) return false;
   try {
-    const parsed = JSON.parse(raw);
+    // 移除装饰字符和警告，找到 JSON 开始
+    const lines = raw.split('\n');
+    const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
+    if (jsonStart === -1) return false;
+    const jsonLines = lines.slice(jsonStart);
+    const cleanOutput = jsonLines.join('\n').trim();
+    const parsed = JSON.parse(cleanOutput);
     if (typeof parsed?.running === "boolean") return parsed.running;
     return parsed?.service?.runtime?.status === "running" || parsed?.service?.runtime?.state === "active";
   } catch {
