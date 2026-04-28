@@ -347,14 +347,39 @@ export async function fetchChannelsStatus(instance?: AppInstance, baseChannels: 
     return baseChannels;
   }
 
-  const result = await readChannelCommand(instance, OPENCLAW_STATUS_COMMAND);
-  if (!result.success) return baseChannels;
+  // 使用 openclaw config get channels 获取配置的渠道列表
+  const configResult = await readFromInstance(instance, "openclaw config get channels");
+  if (!configResult.success) return baseChannels;
 
-  const channelsOutput = extractChannelsOutput(result.output);
-  const sessionsOutput = extractSessionsOutput(result.output);
+  const channelsConfig = parseOpenClawJson(configResult.output) as Record<string, any>;
+  const configuredChannelIds = Object.keys(channelsConfig);
+
+  // 获取运行时状态
+  const statusResult = await readChannelCommand(instance, OPENCLAW_STATUS_COMMAND);
+  const sessionsOutput = statusResult.success ? extractSessionsOutput(statusResult.output) : "";
   const runtimeSessions = parseRuntimeSessions(sessionsOutput);
 
-  return baseChannels.map((channel) => attachRuntimeSession(mapChannelStatus(channel, channelsOutput), runtimeSessions));
+  // 合并配置和默认渠道
+  const allChannelIds = new Set([...configuredChannelIds, ...baseChannels.map(c => c.id)]);
+  const channels: Channel[] = [];
+
+  for (const channelId of allChannelIds) {
+    const baseChannel = baseChannels.find(c => c.id === channelId);
+    const config = channelsConfig[channelId] || {};
+    const isConfigured = configuredChannelIds.includes(channelId);
+    const isEnabled = config.enabled === true;
+
+    channels.push({
+      id: channelId,
+      name: baseChannel?.name || channelId,
+      icon: baseChannel?.icon || "💬",
+      status: isConfigured ? "configured" : "not_configured",
+      enabled: isEnabled,
+      platform: baseChannel?.platform || channelId,
+    });
+  }
+
+  return channels.map(channel => attachRuntimeSession(channel, runtimeSessions));
 }
 
 export async function loadTelegramConfig(instance?: AppInstance): Promise<TelegramChannelConfig> {
