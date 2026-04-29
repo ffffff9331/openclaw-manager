@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { canUseTauriInvoke } from "../lib/platform";
 import type { CommandResult } from "../types/core";
 
 function getTauriUnavailableResult(action: string): CommandResult {
@@ -7,12 +8,6 @@ function getTauriUnavailableResult(action: string): CommandResult {
     output: "",
     error: `${action} 仅在 Tauri 桌面环境可用；当前是 web preview，已跳过宿主命令执行。`,
   };
-}
-
-export function canUseTauriInvoke() {
-  if (typeof window === "undefined") return false;
-  const tauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
-  return typeof invoke === "function" && typeof tauriInternals?.invoke === "function";
 }
 
 // 兼容桥：仅保留给旧路径和调试路径，业务新代码应优先走 readLocalCommand / dispatchLocalCommand。

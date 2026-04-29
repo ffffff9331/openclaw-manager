@@ -1,4 +1,6 @@
 import type { AppInstance, CommandResult, ModelConfig, ModelFormState } from "../types/core";
+import { parseOpenClawJson } from "../lib/cliOutputParser";
+import { isWebPreview } from "../lib/platform";
 import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 
 interface ModelsConfigPayload {
@@ -27,6 +29,7 @@ const NO_INSTANCE_MODELS_MESSAGE = "请先选择要操作的实例，模型页�
 
 export interface ModelConnectivityResult {
   ok: boolean;
+  authFailed?: boolean;
   message: string;
   status?: number;
 }
@@ -35,31 +38,9 @@ function getModelCacheKey(instance?: AppInstance) {
   return instance ? `${instance.type}:${instance.id}:${instance.baseUrl}` : "no-instance";
 }
 
-function isWebPreview() {
-  if (typeof window === "undefined") return false;
-  const tauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
-  return typeof tauriInternals?.invoke !== "function";
-}
-
 function getModelProviderPath(provider: string, key?: string) {
   const basePath = `models.providers.${provider}`;
   return key ? `${basePath}.${key}` : basePath;
-}
-
-function parseOpenClawJson(output: string): any {
-  if (!output) return {};
-  // 移除警告、装饰字符和 OpenClaw banner
-  const lines = output.split('\n');
-  const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
-  if (jsonStart === -1) return {};
-  const jsonLines = lines.slice(jsonStart);
-  const cleanOutput = jsonLines.join('\n').trim();
-  try {
-    return JSON.parse(cleanOutput || "{}");
-  } catch (e) {
-    console.error("JSON parse error:", e, "raw output:", output);
-    return {};
-  }
 }
 
 function parseCurrentModelKey(value: string): CurrentModelInfo {
@@ -111,7 +92,7 @@ async function dispatchModelCommand(instance: AppInstance | undefined, command: 
 async function getParsedModelsConfig(instance?: AppInstance): Promise<ModelsConfigPayload> {
   const result = await getRawModelsConfig(instance);
   if (!result.success || !result.output) return {};
-  return parseOpenClawJson(result.output) as ModelsConfigPayload;
+  return parseOpenClawJson<ModelsConfigPayload>(result.output);
 }
 
 export async function getRawModelsConfig(instance?: AppInstance) {
@@ -157,6 +138,12 @@ export async function loadModelConfigs(instance?: AppInstance): Promise<ModelCon
 
   modelConfigsCache.set(cacheKey, { value: configs, at: Date.now() });
   return configs;
+}
+
+export function invalidateModelCache(instance?: AppInstance) {
+  const cacheKey = getModelCacheKey(instance);
+  modelConfigsCache.delete(cacheKey);
+  currentModelCache.delete(cacheKey);
 }
 
 export async function loadCurrentModel(instance?: AppInstance): Promise<CurrentModelInfo> {
@@ -205,6 +192,7 @@ export async function addModelConfig(newModelConfig: ModelFormState, instance?: 
   const providerConfig = buildProviderConfig(newModelConfig);
   const providerName = `custom-${Date.now()}`;
   await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(providerName)} ${shellQuote(JSON.stringify(providerConfig))}`);
+  invalidateModelCache(instance);
 }
 
 export function buildEditModelForm(model: ModelConfig): ModelFormState {
@@ -235,6 +223,7 @@ export async function saveModelEdit(editingModel: ModelConfig, form: ModelFormSt
     delete (providerConfig as { apiKey?: string }).apiKey;
   }
   await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(provider)} ${shellQuote(JSON.stringify(providerConfig))}`);
+  invalidateModelCache(instance);
 }
 
 export async function setDefaultModel(modelId: string, provider: string, instance?: AppInstance) {
@@ -260,11 +249,13 @@ export async function deleteModel(provider: string, modelId: string, instance?: 
 
   if (nextModels.length === 0) {
     await dispatchModelCommand(instance, `openclaw config unset ${getModelProviderPath(provider)}`);
+    invalidateModelCache(instance);
     return;
   }
 
   const nextProviderConfig = { ...providerConfig, models: nextModels };
   await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(provider)} ${shellQuote(JSON.stringify(nextProviderConfig))}`);
+  invalidateModelCache(instance);
 }
 
 export async function moveModel(provider: string, modelId: string, direction: "up" | "down", instance?: AppInstance) {
@@ -280,6 +271,7 @@ export async function moveModel(provider: string, modelId: string, direction: "u
   [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
   const nextProviderConfig = { ...providerConfig, models: next };
   await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(provider)} ${shellQuote(JSON.stringify(nextProviderConfig))}`);
+  invalidateModelCache(instance);
 }
 
 function buildConnectivityCandidateUrls(baseUrl: string) {
@@ -307,7 +299,10 @@ export async function testModelConnectivity(model: ModelConfig): Promise<ModelCo
     try {
       const response = await fetch(url, { method: "GET", headers });
       if (response.ok) return { ok: true, status: response.status, message: `连通成功：${new URL(url).pathname || "/"}（HTTP ${response.status}）` };
-      if ([200, 204, 401, 403, 404, 405].includes(response.status)) {
+      if ([401, 403].includes(response.status)) {
+        return { ok: false, authFailed: true, status: response.status, message: `目标可达但鉴权失败（HTTP ${response.status}），请检查 API Key` };
+      }
+      if ([204, 404, 405].includes(response.status)) {
         return { ok: true, status: response.status, message: `目标可达：${new URL(url).pathname || "/"}（HTTP ${response.status}）` };
       }
       lastError = `HTTP ${response.status} @ ${url}`;

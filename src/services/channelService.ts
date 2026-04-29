@@ -9,6 +9,7 @@ import type {
   TelegramChannelConfig,
   WhatsappChannelConfig,
 } from "../types/core";
+import { parseOpenClawJson } from "../lib/cliOutputParser";
 import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
 
 const NO_INSTANCE_CHANNEL_MESSAGE = "请先选择要操作的实例，频道页不再默认回退到本机 local。";
@@ -127,22 +128,6 @@ const channelConfigSpecs: { [K in ChannelId]: ChannelConfigSpec<K> } = {
     enableOnSave: true,
   },
 };
-
-function parseOpenClawJson(output: string): Record<string, unknown> {
-  if (!output) return {};
-  // 移除警告、装饰字符和 OpenClaw banner
-  const lines = output.split('\n');
-  const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
-  if (jsonStart === -1) return {};
-  const jsonLines = lines.slice(jsonStart);
-  const cleanOutput = jsonLines.join('\n').trim();
-  try {
-    return JSON.parse(cleanOutput || "{}");
-  } catch (error) {
-    console.error("JSON parse error:", error, "raw output:", output);
-    return {};
-  }
-}
 
 function quoteConfigValue(value: string) {
   return `"${value}"`;

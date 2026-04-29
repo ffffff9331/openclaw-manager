@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isLocalInstance } from "../lib/instanceCapabilities";
+import { canUseTauriInvoke } from "../lib/platform";
 import type { AppInstance } from "../types/core";
 import { dispatchDetachedLocalCommand, readLocalCommand } from "./commandService";
 import { dispatchToInstance, readFromInstance } from "./instanceCommandService";
@@ -110,12 +111,6 @@ const VERSION_CHECK_SPECS = {
     },
   },
 } satisfies Record<string, VersionCheckSpec>;
-
-function canUseTauriInvoke() {
-  if (typeof window === "undefined") return false;
-  const tauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
-  return typeof invoke === "function" && typeof tauriInternals?.invoke === "function";
-}
 
 async function runReadCommand(instance: AppInstance | undefined, command: string) {
   return readFromInstance(instance, command);

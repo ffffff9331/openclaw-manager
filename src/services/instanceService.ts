@@ -1,23 +1,7 @@
-import { canUseTauriInvoke, readLocalCommand, readWslCommand } from "./commandService";
-import { isWindows } from "../lib/platform";
+import { readLocalCommand, readWslCommand } from "./commandService";
+import { canUseTauriInvoke, isWindows } from "../lib/platform";
+import { parseGatewayRunningFromJson } from "../lib/cliOutputParser";
 import type { AppInstance, AppInstanceSource, AppInstanceStatus } from "../types/core";
-
-function parseGatewayRunningFromJson(raw?: string): boolean {
-  if (!raw?.trim()) return false;
-  try {
-    // 移除装饰字符和警告，找到 JSON 开始
-    const lines = raw.split('\n');
-    const jsonStart = lines.findIndex(line => line.trim().startsWith('{'));
-    if (jsonStart === -1) return false;
-    const jsonLines = lines.slice(jsonStart);
-    const cleanOutput = jsonLines.join('\n').trim();
-    const parsed = JSON.parse(cleanOutput);
-    if (typeof parsed?.running === "boolean") return parsed.running;
-    return parsed?.service?.runtime?.status === "running" || parsed?.service?.runtime?.state === "active";
-  } catch {
-    return false;
-  }
-}
 
 const STORAGE_KEY = "ocm.instances.v2";
 const CURRENT_KEY = "ocm.currentInstance.v2";

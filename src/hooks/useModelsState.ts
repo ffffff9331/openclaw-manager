@@ -146,7 +146,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
     try {
       await persistMoveModel(provider, modelId, direction, currentInstance);
       await loadModelConfigs();
-      setModelsStatus(`模型顺序已调整：${modelId} ${direction === "up" ? "上移" : "下移"}，如当前实例正在运行，请按需重载 Gateway`);
+      setModelsStatus(`模型顺序已调整：${modelId} ${direction === "up" ? "上移" : "下移"}，Gateway 将自动重载以生效`);
     } catch (e) {
       setModelsError(formatActionError("调整模型顺序失败", e));
     } finally {
@@ -169,7 +169,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
       setShowAddModelModal(false);
       setNewModelConfig(EMPTY_MODEL_FORM);
       await loadModelConfigs();
-      setModelsStatus("模型添加成功，请按需重载 Gateway");
+      setModelsStatus("模型添加成功，Gateway 将自动重载以生效");
     } catch (e) {
       setModelsError(formatActionError("添加失败", e));
     } finally {
@@ -202,7 +202,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
       if (currentModelProvider === editingModel.provider && currentModel === editingModel.id) {
         await loadCurrentModel();
       }
-      setModelsStatus("模型更新成功，请按需重载 Gateway");
+      setModelsStatus("模型更新成功，Gateway 将自动重载以生效");
     } catch (e) {
       setModelsError(formatActionError("更新失败", e));
     } finally {
@@ -232,7 +232,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
       });
       setModelsStatus(
         effective
-          ? `默认模型已切换为 ${provider} / ${modelId}；如当前实例正在运行，请按需重载 Gateway`
+          ? `默认模型已切换为 ${provider} / ${modelId}；Gateway 将自动重载以生效`
           : `默认模型配置已写入，但当前读数未完全匹配目标；请检查 override 或运行时重载`,
       );
     } catch (e) {
@@ -264,7 +264,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
       if (currentModelProvider === provider && currentModel === modelId) {
         await loadCurrentModel();
       }
-      setModelsStatus(`模型 ${modelId} 已删除，请按需重载 Gateway`);
+      setModelsStatus(`模型 ${modelId} 已删除，Gateway 将自动重载以生效`);
     } catch (e) {
       setModelsError(formatActionError("删除失败", e));
     } finally {

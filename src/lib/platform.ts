@@ -38,3 +38,15 @@ export function isLinux(): boolean {
 export function supportsMacOSServices(): boolean {
   return isMacOS();
 }
+
+/** 检测当前是否运行在 Tauri 桌面环境 */
+export function canUseTauriInvoke(): boolean {
+  if (typeof window === "undefined") return false;
+  const tauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
+  return typeof tauriInternals?.invoke === "function";
+}
+
+/** 检测当前是否为 Web 预览模式（非 Tauri） */
+export function isWebPreview(): boolean {
+  return typeof window !== "undefined" && !canUseTauriInvoke();
+}

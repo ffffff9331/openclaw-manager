@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { canUseTauriInvoke, isWebPreview } from "../lib/platform";
 import type {
   AppInstance,
   GatewayControlState,
@@ -14,12 +15,6 @@ const GATEWAY_STATUS_JSON_COMMAND = "openclaw gateway status --json";
 const GATEWAY_LOGS_COMMAND = "openclaw logs --limit 50";
 const LOCAL_GATEWAY_LOG_LINES = 50;
 const NO_INSTANCE_GATEWAY_MESSAGE = "请先选择要操作的实例，当前页不再默认回退到本机 local。";
-
-function canUseTauriInvoke() {
-  if (typeof window === "undefined") return false;
-  const tauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
-  return typeof invoke === "function" && typeof tauriInternals?.invoke === "function";
-}
 
 function isWslInstance(instance?: AppInstance) {
   return instance?.type === "wsl";
@@ -179,7 +174,13 @@ export async function getGatewayDashboardUrl(instance?: AppInstance) {
   let url = instance.baseUrl;
   if (result.success) {
     const match = result.output.match(/Dashboard:\s*(https?:\/\/[^\s]+)/);
-    if (match) url = match[1];
+    if (match) {
+      try {
+        url = new URL(match[1]).toString();
+      } catch {
+        // regex 提取的 URL 格式异常，回退到 baseUrl
+      }
+    }
   }
 
   // 添加 token 参数

@@ -78,7 +78,7 @@ async function autoApproveDevice(instance: AppInstance | undefined, requestId: s
   }
 }
 
-export async function readFromInstance(instance: AppInstance | undefined, command: InstanceReadCommand): Promise<CommandResult> {
+export async function readFromInstance(instance: AppInstance | undefined, command: InstanceReadCommand, _retried = false): Promise<CommandResult> {
   if (instance) {
     let result: CommandResult;
     if (instance.type === "local") {
@@ -90,12 +90,12 @@ export async function readFromInstance(instance: AppInstance | undefined, comman
     } else {
       result = await requestRemoteCommand(instance, command);
     }
-    // 自动配对重试
-    if (!result.success) {
+    // 自动配对重试（最多一次）
+    if (!result.success && !_retried) {
       const requestId = extractPairingRequestId(result.error || result.output);
       if (requestId) {
         const approved = await autoApproveDevice(instance, requestId);
-        if (approved) return readFromInstance(instance, command);
+        if (approved) return readFromInstance(instance, command, true);
       }
     }
     return result;
@@ -108,7 +108,7 @@ export async function readFromInstance(instance: AppInstance | undefined, comman
   return requestLocalRead(command);
 }
 
-export async function dispatchToInstance(instance: AppInstance | undefined, command: InstanceDispatchCommand): Promise<CommandResult> {
+export async function dispatchToInstance(instance: AppInstance | undefined, command: InstanceDispatchCommand, _retried = false): Promise<CommandResult> {
   if (instance) {
     let result: CommandResult;
     if (instance.type === "local") {
@@ -120,12 +120,12 @@ export async function dispatchToInstance(instance: AppInstance | undefined, comm
     } else {
       result = await requestRemoteCommand(instance, command);
     }
-    // 自动配对重试
-    if (!result.success) {
+    // 自动配对重试（最多一次）
+    if (!result.success && !_retried) {
       const requestId = extractPairingRequestId(result.error || result.output);
       if (requestId) {
         const approved = await autoApproveDevice(instance, requestId);
-        if (approved) return dispatchToInstance(instance, command);
+        if (approved) return dispatchToInstance(instance, command, true);
       }
     }
     return result;

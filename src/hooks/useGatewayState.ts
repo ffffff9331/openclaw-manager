@@ -207,14 +207,11 @@ export function useGatewayState({ currentInstance, setSystemLoading }: UseGatewa
     try {
       const message = await manageGatewayLaunchAgent(action, currentInstance);
       setGatewayStatus((prev) => ({ ...prev, uptime: message }));
-      window.setTimeout(() => {
-        void refreshGatewayControlState().finally(() => {
-          setSystemLoading(null);
-        });
-      }, 0);
+      await refreshGatewayControlState();
     } catch (e) {
       console.error(`Gateway LaunchAgent ${action} failed:`, e);
       alert(formatActionError(`Gateway LaunchAgent ${action} 失败`, e));
+    } finally {
       setSystemLoading(null);
     }
   }, [currentInstance, refreshGatewayControlState, setSystemLoading]);
