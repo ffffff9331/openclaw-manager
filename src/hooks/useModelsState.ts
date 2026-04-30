@@ -28,12 +28,15 @@ export interface ModelsState {
   showAddModelModal: boolean;
   lastSwitchFeedback: ModelSwitchFeedback | null;
   setShowAddModelModal: (value: boolean) => void;
+  closeAddModal: () => void;
   newModelConfig: ModelFormState;
   setNewModelConfig: (value: ModelFormState) => void;
   editingModel: ModelConfig | null;
   setEditingModel: (value: ModelConfig | null) => void;
   editModelForm: ModelFormState;
   setEditModelForm: (value: ModelFormState) => void;
+  addModelProviderMode: string;
+  setAddModelProviderMode: (value: string) => void;
   refreshCurrentModel: () => Promise<void>;
   refreshModels: () => Promise<void>;
   testConnectivity: (model: ModelConfig) => Promise<void>;
@@ -75,6 +78,12 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
   const [newModelConfig, setNewModelConfig] = useState<ModelFormState>(EMPTY_MODEL_FORM);
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
   const [editModelForm, setEditModelForm] = useState<ModelFormState>(EMPTY_MODEL_FORM);
+  const [addModelProviderMode, setAddModelProviderMode] = useState<string>("new");
+
+  const closeAddModal = useCallback(() => {
+    setShowAddModelModal(false);
+    setAddModelProviderMode("new");
+  }, []);
 
   const loadModelConfigs = useCallback(async () => {
     const configs = await fetchModelConfigs(currentInstance);
@@ -156,8 +165,14 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
 
   const addModel = useCallback(async () => {
     setModelsError("");
+    const isExistingProvider = addModelProviderMode !== "new";
     try {
-      validateModelForm(newModelConfig);
+      if (isExistingProvider) {
+        if (!newModelConfig.name.trim()) throw new Error("模型名称不能为空");
+        if (!newModelConfig.id.trim()) throw new Error("模型 ID 不能为空");
+      } else {
+        validateModelForm(newModelConfig);
+      }
     } catch (e) {
       setModelsError(formatActionError("表单校验失败", e));
       return;
@@ -165,9 +180,10 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
 
     setModelsLoading(true);
     try {
-      await addModelConfig(newModelConfig, currentInstance);
+      await addModelConfig(newModelConfig, currentInstance, isExistingProvider ? addModelProviderMode : undefined);
       setShowAddModelModal(false);
       setNewModelConfig(EMPTY_MODEL_FORM);
+      setAddModelProviderMode("new");
       await loadModelConfigs();
       setModelsStatus("模型添加成功，Gateway 将自动重载以生效");
     } catch (e) {
@@ -175,7 +191,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
     } finally {
       setModelsLoading(false);
     }
-  }, [currentInstance, newModelConfig, loadModelConfigs]);
+  }, [addModelProviderMode, currentInstance, loadModelConfigs, newModelConfig]);
 
   const openEditModel = useCallback((model: ModelConfig) => {
     setEditingModel(model);
@@ -296,6 +312,7 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
     showAddModelModal,
     lastSwitchFeedback,
     setShowAddModelModal,
+    closeAddModal,
     newModelConfig,
     setNewModelConfig,
     editingModel,
@@ -304,6 +321,8 @@ export function useModelsState({ currentInstance }: UseModelsStateOptions): Mode
     setEditModelForm,
     refreshCurrentModel,
     refreshModels,
+    addModelProviderMode,
+    setAddModelProviderMode,
     testConnectivity,
     testAllConnectivity,
     moveModel,

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Cpu, Loader2, Plus, PlugZap, RefreshCcw } from "lucide-react";
 import { ModelFormModal } from "../components/ModelFormModal";
 import { ModelProviderSection } from "../components/ModelProviderSection";
@@ -16,12 +16,15 @@ interface ModelsPageState {
   showAddModelModal: boolean;
   lastSwitchFeedback: import("../types/core").ModelSwitchFeedback | null;
   setShowAddModelModal: (value: boolean) => void;
+  closeAddModal: () => void;
   newModelConfig: ModelFormState;
   setNewModelConfig: (value: ModelFormState) => void;
   editingModel: ModelConfig | null;
   setEditingModel: (value: ModelConfig | null) => void;
   editModelForm: ModelFormState;
   setEditModelForm: (value: ModelFormState) => void;
+  addModelProviderMode: string;
+  setAddModelProviderMode: (value: string) => void;
   refreshModels: () => Promise<void>;
   testConnectivity: (model: ModelConfig) => Promise<void>;
   testAllConnectivity: () => Promise<void>;
@@ -187,6 +190,7 @@ const ModelModals = memo(function ModelModals({
   newModelConfig,
   setNewModelConfig,
   setShowAddModelModal,
+  closeAddModal,
   addModel,
   modelsLoading,
   editingModel,
@@ -195,11 +199,15 @@ const ModelModals = memo(function ModelModals({
   setEditingModel,
   saveModelEdit,
   modelsError,
+  existingProviders,
+  addModelProviderMode,
+  setAddModelProviderMode,
 }: {
   showAddModelModal: boolean;
   newModelConfig: ModelFormState;
   setNewModelConfig: (value: ModelFormState) => void;
   setShowAddModelModal: (value: boolean) => void;
+  closeAddModal: () => void;
   addModel: () => Promise<void>;
   modelsLoading: boolean;
   editingModel: ModelConfig | null;
@@ -208,11 +216,24 @@ const ModelModals = memo(function ModelModals({
   setEditingModel: (value: ModelConfig | null) => void;
   saveModelEdit: () => Promise<void>;
   modelsError: string;
+  existingProviders: string[];
+  addModelProviderMode: string;
+  setAddModelProviderMode: (value: string) => void;
 }) {
   return (
     <>
       {showAddModelModal && (
-        <ModelFormModal title="添加模型" form={newModelConfig} setForm={setNewModelConfig} onClose={() => setShowAddModelModal(false)} onSubmit={addModel} submitLabel={modelsLoading ? "提交中..." : "添加"} />
+        <ModelFormModal
+          title="添加模型"
+          form={newModelConfig}
+          setForm={setNewModelConfig}
+          onClose={closeAddModal}
+          onSubmit={addModel}
+          submitLabel={modelsLoading ? "提交中..." : "添加"}
+          existingProviders={existingProviders}
+          providerMode={addModelProviderMode}
+          onProviderModeChange={setAddModelProviderMode}
+        />
       )}
 
       {editingModel && (
@@ -235,6 +256,7 @@ export function ModelsPage({ modelsState }: ModelsPageProps) {
     modelsError,
     showAddModelModal,
     setShowAddModelModal,
+    closeAddModal,
     newModelConfig,
     setNewModelConfig,
     editingModel,
@@ -250,9 +272,12 @@ export function ModelsPage({ modelsState }: ModelsPageProps) {
     setDefaultModel,
     deleteModel,
     openEditModel,
+    addModelProviderMode,
+    setAddModelProviderMode,
   } = modelsState;
 
   const groupedModels = getGroupedModels(modelConfigs);
+  const existingProviders = useMemo(() => Object.keys(groupedModels), [groupedModels]);
 
   return (
     <div className="page-container">
@@ -294,6 +319,7 @@ export function ModelsPage({ modelsState }: ModelsPageProps) {
         newModelConfig={newModelConfig}
         setNewModelConfig={setNewModelConfig}
         setShowAddModelModal={setShowAddModelModal}
+        closeAddModal={closeAddModal}
         addModel={addModel}
         modelsLoading={modelsLoading}
         editingModel={editingModel}
@@ -302,6 +328,9 @@ export function ModelsPage({ modelsState }: ModelsPageProps) {
         setEditingModel={setEditingModel}
         saveModelEdit={saveModelEdit}
         modelsError={modelsError}
+        existingProviders={existingProviders}
+        addModelProviderMode={addModelProviderMode}
+        setAddModelProviderMode={setAddModelProviderMode}
       />
     </div>
   );

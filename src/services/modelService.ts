@@ -186,12 +186,31 @@ export async function loadCurrentModel(instance?: AppInstance): Promise<CurrentM
   return parsed;
 }
 
-export async function addModelConfig(newModelConfig: ModelFormState, instance?: AppInstance) {
+export async function addModelConfig(newModelConfig: ModelFormState, instance?: AppInstance, targetProvider?: string) {
   if (!instance) throw new Error(NO_INSTANCE_MODELS_MESSAGE);
   if (!newModelConfig.name || !newModelConfig.id || !newModelConfig.baseUrl) return;
-  const providerConfig = buildProviderConfig(newModelConfig);
-  const providerName = `custom-${Date.now()}`;
-  await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(providerName)} ${shellQuote(JSON.stringify(providerConfig))}`);
+  const providerName = targetProvider || `custom-${Date.now()}`;
+  if (targetProvider) {
+    // 追加到已有 provider 的 models 列表
+    const config = await getParsedModelsConfig(instance);
+    const existingModels = Array.isArray(config.providers?.[targetProvider]?.models) ? [...config.providers[targetProvider].models] : [];
+    const newModel = {
+      id: newModelConfig.id.trim(),
+      name: newModelConfig.name.trim(),
+      contextWindow: parseNumberField(newModelConfig.contextWindow, "上下文窗口") ?? 128000,
+      maxTokens: parseNumberField(newModelConfig.maxTokens, "最大输出") ?? 8192,
+    };
+    existingModels.push(newModel);
+    const providerConfig = { ...config.providers?.[targetProvider], models: existingModels };
+    if (newModelConfig.apiKey.trim()) {
+      (providerConfig as { apiKey?: string }).apiKey = newModelConfig.apiKey.trim();
+    }
+    await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(targetProvider)} ${shellQuote(JSON.stringify(providerConfig))}`);
+  } else {
+    // 创建新 provider
+    const providerConfig = buildProviderConfig(newModelConfig);
+    await dispatchModelCommand(instance, `openclaw config set ${getModelProviderPath(providerName)} ${shellQuote(JSON.stringify(providerConfig))}`);
+  }
   invalidateModelCache(instance);
 }
 
